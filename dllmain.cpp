@@ -1,11 +1,11 @@
 // dllmain.cpp : Defines the entry point for the DLL application.
 #include "pch.h"
-#include "MinHook.h"
+//#include "MinHook.h"
 #include <windows.h>
 #include <iostream>
 #include "Hooking.Patterns.h"
 #include "safetyhook.hpp"
-#pragma comment(lib, "libMinHook.x86.lib")
+//#pragma comment(lib, "libMinHook.x86.lib")
 #include "shared.h"
 typedef cvar_t* (__cdecl* Cvar_GetT)(char* var_name, const char* var_value, int flags);
 Cvar_GetT Cvar_Get = (Cvar_GetT)NULL;
@@ -89,8 +89,10 @@ void CheckModule()
     }
 }
 
+
+SafetyHookInline originalLoadDLLd;
 HMODULE __cdecl hookCOD_dllLoad(const char* a1, FARPROC* a2, int a3) {
-    HMODULE result = originalLoadDLL(a1, a2, a3);
+    HMODULE result = originalLoadDLLd.ccall<HMODULE>(a1, a2, a3);
     CheckModule();
    // printf("0x%X \n", (int)result);
     return result;
@@ -136,21 +138,24 @@ void InitHook() {
         cg_fovscale = Cvar_Get((char*)"cg_fovscale", "1.0", CVAR_ARCHIVE);
         cg_fovfixaspectratio = Cvar_Get((char*)"cg_fovfixaspectratio", "1", CVAR_ARCHIVE);
     }
-    if (MH_Initialize() != MH_OK) {
-        //MessageBoxW(NULL, L"FAILED TO INITIALIZE", L"Error", MB_OK | MB_ICONERROR);
-        return;
-    }
-    if (MH_CreateHook((void**)CheckGame()->LoadDLLAddr, &hookCOD_dllLoad, (void**)&originalLoadDLL) != MH_OK) {
-        //MessageBoxW(NULL, L"FAILED TO HOOK", L"Error", MB_OK | MB_ICONERROR);
-        return;
-    }
-    
-    if (MH_EnableHook(MH_ALL_HOOKS) != MH_OK) {
-        //MessageBoxW(NULL, L"FAILED TO ENABLE", L"Error", MB_OK | MB_ICONERROR);
-        return;
-    }
+    //if (MH_Initialize() != MH_OK) {
+    //    //MessageBoxW(NULL, L"FAILED TO INITIALIZE", L"Error", MB_OK | MB_ICONERROR);
+    //    return;
+    //}
+    //if (MH_CreateHook((void**)CheckGame()->LoadDLLAddr, &hookCOD_dllLoad, (void**)&originalLoadDLL) != MH_OK) {
+    //    //MessageBoxW(NULL, L"FAILED TO HOOK", L"Error", MB_OK | MB_ICONERROR);
+    //    return;
+    //}
 
-    //MessageBoxW(NULL, L"FAILED TO ENABLE", L"Error", MB_OK | MB_ICONERROR);
+    originalLoadDLLd = safetyhook::create_inline(CheckGame()->LoadDLLAddr, hookCOD_dllLoad);
+
+
+    //if (MH_EnableHook(MH_ALL_HOOKS) != MH_OK) {
+    //    //MessageBoxW(NULL, L"FAILED TO ENABLE", L"Error", MB_OK | MB_ICONERROR);
+    //    return;
+    //}
+
+    MessageBoxW(NULL, L"FAILED TO ENABLE", L"Error", MB_OK | MB_ICONERROR);
 }
 
 void codDLLhooks(HMODULE handle) {
