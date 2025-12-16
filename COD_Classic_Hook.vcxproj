@@ -154,9 +154,11 @@
   <ItemGroup>
     <ClInclude Include="framework.h" />
     <ClInclude Include="Hooking.Patterns.h" />
+    <ClInclude Include="MemoryMgr.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="safetyhook.hpp" />
     <ClInclude Include="shared.h" />
+    <ClInclude Include="structs.h" />
     <ClInclude Include="Zydis.h" />
   </ItemGroup>
   <ItemGroup>
