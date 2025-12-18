@@ -418,11 +418,6 @@ float get_safeArea_horizontal() {
     return std::clamp(safeArea_horizontal->value, 0.f, 1.f);
 }
 
-void Con_DrawConsole() {
-    cdecl_call<int>(0x4D7D70);
-    cdecl_call<void>(0x40A450);
-
-}
 
 SafetyHookInline glOrtho_og{};
 //
@@ -1198,6 +1193,31 @@ cvar_s* __cdecl Cvar_Set(const char* cvar_name, const char* value, BOOL force) {
 
 }
 
+SafetyHookInline SCR_AdjustFrom640_OG;
+bool ConsoleDrawing;
+void Con_DrawConsole() {
+    //cdecl_call<int>(0x4D7D70);
+    ConsoleDrawing = true;
+    cdecl_call<void>(0x40A450);
+    ConsoleDrawing = false;
+}
+
+
+
+float* __cdecl SCR_AdjustFrom640(float* x, float* y, float* w, float* h) {
+
+    auto result = SCR_AdjustFrom640_OG.ccall<float*>(x, y, w, h);
+
+    if (ConsoleDrawing && x && h) {
+        static float fuckwit[2];
+
+        *x *= fuckwit[0];
+        *w *= fuckwit[1];
+        printf("fuckwit %p", fuckwit);
+    }
+
+}
+
 void InitHook() {
 
     if (!CheckGame()) {
@@ -1247,7 +1267,9 @@ void InitHook() {
 
     }
 
-    //Memory::VP::InjectHook(0x00411757, Con_DrawConsole);
+    Memory::VP::InjectHook(0x00411757, Con_DrawConsole);
+
+    SCR_AdjustFrom640_OG = safetyhook::create_inline(0x411070, SCR_AdjustFrom640);
 
     LoadLibraryD = safetyhook::create_inline(LoadLibraryA, LoadLibraryHook);
 
