@@ -76,8 +76,10 @@ inline Ret thiscall_call(uintptr_t addr, Args... args) {
     return reinterpret_cast<Ret(__thiscall*)(Args...)>(addr)(args...);
 }
 
-typedef cvar_t* (__cdecl* Cvar_GetT)(char* var_name, const char* var_value, int flags);
+typedef cvar_t* (__cdecl* Cvar_GetT)(const char* var_name, const char* var_value, int flags);
 Cvar_GetT Cvar_Get = (Cvar_GetT)NULL;
+
+
 
 cvar_t* cg_fovscale;
 cvar_t* cg_fovfixaspectratio;
@@ -85,6 +87,8 @@ cvar_t* cg_fixaspect;
 cvar_t* safeArea_horizontal;
 cvar_t* r_noborder;
 cvar_t* r_mode_auto;
+cvar_t* player_sprintmult;
+
 void codDLLhooks(HMODULE handle);
 
 void ui_hooks(HMODULE handle);
@@ -150,9 +154,10 @@ COD_Classic_Version *LoadedGame = NULL;
 
 uintptr_t cg_game_offset = 0;
 uintptr_t ui_offset = 0;
+uintptr_t game_offset = 0;
 
 #define CGAME_OFF(x) (cg_game_offset + (x - 0x30000000))
-#define GAME_OFF(x) (game_mp + (x - 0x20000000))
+#define GAME_OFF(x) (game_offset + (x - 0x20000000))
 
 #define UI_OFF(x) (ui_offset + (x - 0x40000000))
 
@@ -189,6 +194,25 @@ SAFETYHOOK_NOINLINE uintptr_t ui(uintptr_t CODUOSP, uintptr_t CODUOMP = 0) {
 
     if (result >= 0x40000000) {
         result = UI_OFF(result);
+    }
+    return result;
+
+}
+
+SAFETYHOOK_NOINLINE uintptr_t g(uintptr_t CODUOSP, uintptr_t CODUOMP = 0) {
+
+    if (ui_offset == NULL)
+        return NULL;
+
+    uintptr_t result = 0;
+
+    if (LoadedGame == &COD_SP) {
+        result = CODUOMP;
+    }
+    else result = CODUOSP;
+
+    if (result >= 0x20000000) {
+        result = GAME_OFF(result);
     }
     return result;
 
@@ -406,7 +430,7 @@ int process_width(int width) {
 }
 
 SafetyHookInline LoadLibraryD;
-
+void game_hooks(HMODULE handle);
 HMODULE __stdcall LoadLibraryHook(const char* filename) {
 
     auto hModule = LoadLibraryD.unsafe_stdcall<HMODULE>(filename);
@@ -416,6 +440,9 @@ HMODULE __stdcall LoadLibraryHook(const char* filename) {
     }
     else if (strstr(filename, LoadedGame->uixname) != NULL) {
         ui_hooks(hModule);
+    }
+    else if (!strcmp(filename,"uo_gamex86.dll")) {
+        game_hooks(hModule);
     }
 
     return hModule;
@@ -588,7 +615,7 @@ int Cvar_Init_hook() {
     printf("safearea ptr return %p size after %d\n", safeArea_horizontal, size_cvars);
     r_noborder = Cvar_Get((char*)"r_noborder", "0", CVAR_ARCHIVE);
     r_mode_auto = Cvar_Get((char*)"r_mode_auto", "0", CVAR_ARCHIVE);
-
+    player_sprintmult = Cvar_Get("player_sprintmult", "0.66666669", CVAR_CHEAT);
     return result;
 }
 
@@ -1425,6 +1452,20 @@ void ui_hooks(HMODULE handle) {
         });
 }
 
+void game_hooks(HMODULE handle) {
+    uintptr_t OFFSET = (uintptr_t)handle;
+    game_offset = OFFSET;
+    Memory::VP::Nop(g(0x200306C8), 5);
+
+    if (player_sprintmult) {
+        auto pattern = hook::pattern(handle, "? ? ? ? ? ? ? ? ? ? ? ? ? ? ? ? ? ? ? ? ? ? ? ? ? ? ? ? ? ? ? ? DF E0 F6 C4 ? 7A ? 8B 41 ? 83 E0 ? C7 44 81");
+        if (!pattern.empty())
+            Memory::VP::Patch<float*>(pattern.get_first(2), &player_sprintmult->value);
+
+    }
+
+}
+
 SafetyHookInline* SCR_DrawString_hook_possible1_detour;
 
 int __cdecl SCR_DrawString_hook_possible1(float x, float y, float width, float height) {
@@ -1616,10 +1657,10 @@ float* __cdecl SCR_AdjustFrom640(float* x, float* y, float* w, float* h) {
 
 void InitHook() {
     CheckGame();
-    //if (!CheckGame()) {
-    //    MessageBoxW(NULL, L"COD CLASSIC LOAD FAILED", L"Error", MB_OK | MB_ICONWARNING);
-    //    return;
-    //}
+    if (!CheckGame()) {
+        MessageBoxW(NULL, L"COD CLASSIC LOAD FAILED", L"Error", MB_OK | MB_ICONWARNING);
+        return;
+    }
 
     InitializeDisplayModesForGame();
 
@@ -1685,8 +1726,8 @@ void InitHook() {
         buffertosee = "COD_UO_MP";
     }
 
-    sprintf_s(buffer, sizeof(buffer), "INIT START %s", buffertosee);
-    MessageBoxA(NULL, buffer, "Error", MB_OK | MB_ICONWARNING);
+    //sprintf_s(buffer, sizeof(buffer), "INIT START %s", buffertosee);
+    //MessageBoxA(NULL, buffer, "Error", MB_OK | MB_ICONWARNING);
 
     SetUpFunctions();
     LoadMenuConfigs();
