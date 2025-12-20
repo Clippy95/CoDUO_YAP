@@ -12,6 +12,8 @@
 
 #include <deque>
 
+#include <set>
+#include <algorithm>
 
 #include "structs.h"
 
@@ -1212,12 +1214,203 @@ void StaticInstructionPatches(cvar_s* safeArea_horizontal_ptr = safeArea_horizon
     }
 
 }
+const char* UNKNOWN = "BADSTR";
+const char* __cdecl String_Alloc_ui(const char* string_to_alloc) {
+    auto ptr = ui(0x4000D400);
+
+    if (ptr) {
+        return cdecl_call<const char*>(ptr, string_to_alloc);
+    }
+    return UNKNOWN;
+}
+
+
+
+typedef struct vidmode_s
+{
+    const char* description;
+    int width, height;
+    float pixelAspect;
+} vidmode_t;
+
+struct vidmode_menu
+{
+    const char* description;
+    int r_mode_setting;
+};
+
+struct DisplayModeKey {
+    int width;
+    int height;
+    int bpp;
+    int freq;
+
+    bool operator<(const DisplayModeKey& other) const {
+        if (width != other.width) return width > other.width;
+        if (height != other.height) return height > other.height;
+        if (bpp != other.bpp) return bpp > other.bpp;
+        return freq > other.freq;
+    }
+};
+
+struct ResolutionKey {
+    int width;
+    int height;
+
+    bool operator<(const ResolutionKey& other) const {
+        if (width != other.width) return width > other.width; // Descending
+        return height > other.height;
+    }
+
+    bool operator==(const ResolutionKey& other) const {
+        return width == other.width && height == other.height;
+    }
+};
+
+std::vector<vidmode_t> r_vidModes_dynamic;
+std::vector<vidmode_menu> r_vidModes_menu_dynamic;
+std::vector<std::string> mode_descriptions;
+std::vector<std::string> menu_descriptions;
+
+std::vector<char*> allocated_strings;
+
+char* AllocateString(const char* str) {
+    size_t len = strlen(str) + 1;
+    char* newStr = new char[len];
+    strcpy(newStr, str);
+    allocated_strings.push_back(newStr);
+    return newStr;
+}
+
+void InitializeDisplayModes() {
+    DEVMODE devMode;
+    int modeNum = 0;
+    std::set<ResolutionKey> uniqueResolutions;
+
+    memset(&devMode, 0, sizeof(DEVMODE));
+    devMode.dmSize = sizeof(DEVMODE);
+
+    // Enumerate all display modes
+    while (EnumDisplaySettings(NULL, modeNum, &devMode)) {
+        if (devMode.dmPelsWidth >= 640 &&
+            devMode.dmPelsHeight >= 480 &&
+            devMode.dmBitsPerPel >= 16) {
+
+            ResolutionKey key = {
+                (int)devMode.dmPelsWidth,
+                (int)devMode.dmPelsHeight
+            };
+            uniqueResolutions.insert(key);
+        }
+        modeNum++;
+    }
+
+    // Convert to r_vidModes array (with "Mode X:" prefix)
+    int modeIndex = 0;
+    for (const auto& res : uniqueResolutions) {
+        char desc[64];
+        float aspect = (float)res.width / (float)res.height;
+        bool isWide = (aspect > 1.5f);
+
+        if (isWide) {
+            sprintf(desc, "Mode %2d: %dx%d (wide)", modeIndex, res.width, res.height);
+        }
+        else {
+            sprintf(desc, "Mode %2d: %dx%d", modeIndex, res.width, res.height);
+        }
+
+        vidmode_t vidMode = {
+            AllocateString(desc),
+            res.width,
+            res.height,
+            1.0f
+        };
+        r_vidModes_dynamic.push_back(vidMode);
+        modeIndex++;
+    }
+
+    // Convert to menu array (just "WxH")
+
+    int menuCount = min((int)uniqueResolutions.size(), MAX_MULTI_CVARS);
+
+    auto it = uniqueResolutions.begin();
+    for (int i = 0; i < menuCount; i++, ++it) {
+        char menuDesc[32];
+        sprintf(menuDesc, "%dx%d", it->width, it->height);
+
+        vidmode_menu menuMode = {
+            AllocateString(menuDesc),
+            i
+        };
+        r_vidModes_menu_dynamic.push_back(menuMode);
+    }
+
+    printf("Initialized %d unique display modes (%d available for menu)\n",
+        (int)r_vidModes_dynamic.size(), menuCount);
+
+    // Debug print
+    for (int i = 0; i < min(5, (int)r_vidModes_menu_dynamic.size()); i++) {
+        printf("Menu[%d]: %s -> Mode %d\n", i,
+            r_vidModes_menu_dynamic[i].description,
+            r_vidModes_menu_dynamic[i].r_mode_setting);
+
+
+
+        vidmode_t* r_vidModes = nullptr;
+        vidmode_menu* r_vidModes_menu = nullptr;
+        int r_vidModes_count = 0;
+        int r_vidModes_menu_count = 0;
+    }
+}
+vidmode_t* r_vidModes = nullptr;
+vidmode_menu* r_vidModes_menu = nullptr;
+int r_vidModes_count = 0;
+int r_vidModes_menu_count = 0;
+
+void InitializeDisplayModesForGame() {
+    InitializeDisplayModes();
+
+    r_vidModes_count = r_vidModes_dynamic.size();
+    r_vidModes = new vidmode_t[r_vidModes_count];
+    memcpy(r_vidModes, r_vidModes_dynamic.data(), r_vidModes_count * sizeof(vidmode_t));
+
+    r_vidModes_menu_count = r_vidModes_menu_dynamic.size();
+    r_vidModes_menu = new vidmode_menu[r_vidModes_menu_count];
+    memcpy(r_vidModes_menu, r_vidModes_menu_dynamic.data(), r_vidModes_menu_count * sizeof(vidmode_menu));
+
+    auto r_mode_read = exe(0x425F9E + 2);
+    if (r_mode_read) {
+        Memory::VP::Patch<void*>(r_mode_read, r_vidModes);
+        Memory::VP::Patch<void*>(exe(0x425FC4 + 2), r_vidModes);
+        Memory::VP::Patch<void*>(exe(0x4AA35B + 1), r_vidModes);
+        Memory::VP::Patch<void*>(exe(0x4AA39D + 1), r_vidModes);
+        *(int*)exe(0x0057B578) = r_vidModes_count;
+    }
+    Memory::VP::Nop(exe(0x4AC143), 2);
+}
 
 void ui_hooks(HMODULE handle) {
     uintptr_t OFFSET = (uintptr_t)handle;
     ui_offset = OFFSET;
     Item_Paint_ui = CreateInlineHook(ui(0x40015400), Item_Paint_ui_f);
-
+    CreateMidHook(ui(0x40017330), [](SafetyHookContext& ctx) {
+        itemDef_s* item = *(itemDef_s**)(ctx.esp + 0x42C);
+        if (item) {
+            if (item->cvar && !strcmp("ui_r_mode", item->cvar)) {
+                printf("cvar %s\n", item->cvar);
+                multiDef_t* multiPtr = (multiDef_t*)sp_mp((uintptr_t)item->typeData, item->cursorPos);
+                if (multiPtr) {
+                    multiPtr->count = 0;
+                    // Use the menu-specific array (already limited to MAX_MULTI_CVARS)
+                    for (int i = 0; i < r_vidModes_menu_count; i++) {
+                        multiPtr->cvarList[multiPtr->count] = String_Alloc_ui(r_vidModes_menu[i].description);
+                        multiPtr->cvarValue[multiPtr->count] = r_vidModes_menu[i].r_mode_setting;
+                        multiPtr->count++;
+                    }
+                }
+            }
+        }
+        });
 }
 
 SafetyHookInline* SCR_DrawString_hook_possible1_detour;
@@ -1253,7 +1446,7 @@ void codDLLhooks(HMODULE handle) {
     auto pat = hook::pattern(handle,"83 EC ? 8B 44 24 ? ? ? ? ? ? ? ? ? ? ? 8B 4C 24 ? 6A 00");
 
     if (!pat.empty()) {
-        SCR_DrawString_hook_possible1_detour = CreateInlineHook(pat.get_first(), SCR_DrawString_hook_possible1_detour);
+        //SCR_DrawString_hook_possible1_detour = CreateInlineHook(pat.get_first(), SCR_DrawString_hook_possible1_detour);
     }
 
     Memory::VP::InterceptCall(cg(0x30011F68,0x3001A49B), crosshair_render_func, crosshair_render_hook);
@@ -1298,16 +1491,6 @@ void codDLLhooks(HMODULE handle) {
 
             });
     }
-
-    //if (*(uintptr_t*)0x47BD978 && !qglViewport_og.target_address()) {
-    //    //qglViewport_og = safetyhook::create_inline(*(uintptr_t*)0x047BD978, &qglViewport_detour);
-    //}
-
-    //if (*(uintptr_t*)0x47BD718 && !qglScissor_og.target_address()) {
-    //    //qglScissor_og = safetyhook::create_inline(*(uintptr_t*)0x47BD718, &qglScisso_detour);
-    //}
-
-    //DrawHudElemMaterial_mid.reset();
     auto SingleHudElem_ptr = cg(0x3001FB14, 0x3002A4C4);
     if (SingleHudElem_ptr) {
         Memory::VP::InterceptCall(SingleHudElem_ptr, DrawSingleHudElem2dog, DrawSingleHudElem2dHook);
@@ -1418,39 +1601,6 @@ float* __cdecl SCR_AdjustFrom640(float* x, float* y, float* w, float* h) {
 
 }
 
-//#include <zlib/zlib.h>
-//#include <sys/stat.h>
-//std::string GetBinaryResource(int name)
-//{
-//    HMODULE handle;
-//    GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, (LPCSTR)GetBinaryResource, &handle);
-//
-//    HRSRC rc = FindResource(handle, MAKEINTRESOURCE(name), MAKEINTRESOURCE(256));
-//    HGLOBAL rcData = LoadResource(handle, rc);
-//    DWORD size = SizeofResource(handle, rc);
-//
-//    std::string data((char*)LockResource(rcData), size);
-//    FreeResource(rcData);
-//
-//    return data;
-//}
-//
-//void PatchT4_SteamDRM()
-//{
-//
-//
-//    // Replace encrypted .text segment
-//    DWORD size = 0x13E000;
-//    std::string data = GetBinaryResource(101);
-//    uncompress((unsigned char*)0x401000, &size, (unsigned char*)data.data(), data.size());
-//
-//    // Apply new entry point
-//    HMODULE hModule = GetModuleHandle(NULL);
-//    PIMAGE_DOS_HEADER header = (PIMAGE_DOS_HEADER)hModule;
-//    PIMAGE_NT_HEADERS ntHeader = (PIMAGE_NT_HEADERS)((DWORD)hModule + header->e_lfanew);
-//    ntHeader->OptionalHeader.AddressOfEntryPoint = 0x129DDC;
-//}
-
 
 void InitHook() {
     CheckGame();
@@ -1459,6 +1609,7 @@ void InitHook() {
     //    return;
     //}
 
+    InitializeDisplayModesForGame();
 
 
     auto pat = hook::pattern("53 8B 5C 24 ? 56 8B 74 24 ? 57 53");
