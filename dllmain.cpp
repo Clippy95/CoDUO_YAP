@@ -79,6 +79,7 @@ inline Ret thiscall_call(uintptr_t addr, Args... args) {
 typedef cvar_t* (__cdecl* Cvar_GetT)(const char* var_name, const char* var_value, int flags);
 Cvar_GetT Cvar_Get = (Cvar_GetT)NULL;
 
+cvar_t* cg_fovMin;
 cvar_t* cg_fovscale;
 cvar_t* cg_fovfixaspectratio;
 cvar_t* cg_fixaspect;
@@ -292,9 +293,15 @@ double GetAspectRatio_standardfix() {
 
 double CG_GetViewFov_hook() {
     double fov = CG_GetViewFov_og_S->call<double>();
+
+    if (cg_fovMin && (cg_fovMin->value - fov) > 0.f) {
+        fov = cg_fovMin->value;
+    }
+
     if (cg_fovscale && cg_fovscale->value) {
         double halfFovRad = (fov / 2.0) * (M_PI / 180.0); // Convert to radians
         double tanHalfFov = tan(halfFovRad);
+
 
         if (cg_fovfixaspectratio && cg_fovfixaspectratio->integer) {
             // Convert horizontal FOV to vertical, then back to horizontal with new aspect ratio
@@ -660,6 +667,7 @@ int Cvar_Init_hook() {
 
     int& size_cvars = *(int*)0x4805EC0;
     printf("cvar_init cvar hooks cvar_get ptr %p size %d\n", Cvar_Get, size_cvars);
+    cg_fovMin = Cvar_Get((char*)"cg_fovMin", "1.0", CVAR_ARCHIVE);
     cg_fovscale = Cvar_Get((char*)"cg_fovscale", "1.0", CVAR_ARCHIVE);
     cg_fovfixaspectratio = Cvar_Get((char*)"cg_fixaspectFOV", "1", CVAR_ARCHIVE);
     cg_fixaspect = Cvar_Get((char*)"cg_fixaspect", "1", CVAR_ARCHIVE);
