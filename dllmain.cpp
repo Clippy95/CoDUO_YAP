@@ -1454,15 +1454,16 @@ void InitializeDisplayModesForGame() {
     r_vidModes_menu = new vidmode_menu[r_vidModes_menu_count];
     memcpy(r_vidModes_menu, r_vidModes_menu_dynamic.data(), r_vidModes_menu_count * sizeof(vidmode_menu));
 
-    auto r_mode_read = exe(0x425F9E + 2);
+    auto r_mode_read = exe(0x425F9E + 2,0x4C177B + 2);
     if (r_mode_read) {
         Memory::VP::Patch<void*>(r_mode_read, r_vidModes);
-        Memory::VP::Patch<void*>(exe(0x425FC4 + 2), r_vidModes);
-        Memory::VP::Patch<void*>(exe(0x4AA35B + 1), r_vidModes);
-        Memory::VP::Patch<void*>(exe(0x4AA39D + 1), r_vidModes);
-        *(int*)exe(0x0057B578) = r_vidModes_count;
+        Memory::VP::Patch<void*>(exe(0x425FC4 + 2,0x4C17BD + 2), r_vidModes);
+        if (sp_mp(1)) {
+            Memory::VP::Patch<void*>(exe(0x4AA35B + 1), r_vidModes);
+            Memory::VP::Patch<void*>(exe(0x4AA39D + 1), r_vidModes);
+        }
+        *(int*)exe(0x0057B578,0x5CE908) = r_vidModes_count;
     }
-    Memory::VP::Nop(exe(0x4AC143), 2);
 }
 
 void ui_hooks(HMODULE handle) {
@@ -1547,42 +1548,46 @@ int __cdecl SCR_DrawString_hook_possible1(float x, float y, float width, float h
 
 
 void codDLLhooks(HMODULE handle) {
-   // printf("run");
+    // printf("run");
     uintptr_t OFFSET = (uintptr_t)handle;
     cg_game_offset = OFFSET;
     StaticInstructionPatches();
     Memory::VP::InterceptCall(OFFSET + LoadedGame->CG_DrawFlashImage_Draw, DrawStretch_og, DrawStretch_300135B0);
-    Memory::VP::InterceptCall(cg(0x3001221A,0x3001A8CF), DrawStretch_og, DrawStretch_300135B0);
+    Memory::VP::InterceptCall(cg(0x3001221A, 0x3001A8CF), DrawStretch_og, DrawStretch_300135B0);
 
-    unsigned int *res = (unsigned int*)LoadedGame->X_res_Addr;
+    unsigned int* res = (unsigned int*)LoadedGame->X_res_Addr;
 
     x_modded = res[0] + (res[0] - (res[1] * GetAspectRatio()));
 
-    auto pat = hook::pattern(handle,"83 EC ? 8B 44 24 ? ? ? ? ? ? ? ? ? ? ? 8B 4C 24 ? 6A 00");
+    auto pat = hook::pattern(handle, "83 EC ? 8B 44 24 ? ? ? ? ? ? ? ? ? ? ? 8B 4C 24 ? 6A 00");
 
     if (!pat.empty()) {
         //SCR_DrawString_hook_possible1_detour = CreateInlineHook(pat.get_first(), SCR_DrawString_hook_possible1_detour);
     }
 
-    Memory::VP::InterceptCall(cg(0x30011F68,0x3001A49B), crosshair_render_func, crosshair_render_hook);
+    if (sp_mp(0, 0)) {
 
-    Memory::VP::InterceptCall(cg(0x30011222,0x30019752), trap_R_DrawStretchPic, R_DrawStretchPic_leftsniper);
+    }
 
-    Memory::VP::InterceptCall(cg(0x30011270,0x300197A0), trap_R_DrawStretchPic, R_DrawStretchPic_rightsniper);
+    Memory::VP::InterceptCall(cg(0x30011F68, 0x3001A49B), crosshair_render_func, crosshair_render_hook);
 
-    Memory::VP::Nop(cg(0x30011205,0x30019735), 2);
+    Memory::VP::InterceptCall(cg(0x30011222, 0x30019752), trap_R_DrawStretchPic, R_DrawStretchPic_leftsniper);
 
-    Memory::VP::Nop(cg(0x30011247,0x30019777), 2);
+    Memory::VP::InterceptCall(cg(0x30011270, 0x300197A0), trap_R_DrawStretchPic, R_DrawStretchPic_rightsniper);
 
-    CG_DrawPicAddr = cg(0x30013B70,0x3001CAA0);
+    Memory::VP::Nop(cg(0x30011205, 0x30019735), 2);
+
+    Memory::VP::Nop(cg(0x30011247, 0x30019777), 2);
+
+    CG_DrawPicAddr = cg(0x30013B70, 0x3001CAA0);
 
     CG_GetViewFov_og_S = CreateInlineHook(OFFSET + LoadedGame->DLL_CG_GetViewFov_offset, &CG_GetViewFov_hook);
-        //if (MH_CreateHook((void**)OFFSET + 0x2CC20, &CG_GetViewFov_hook, (void**)&CG_GetViewFov_og) != MH_OK) {
-        //    MessageBoxW(NULL, L"FAILED TO HOOK", L"Error", MB_OK | MB_ICONERROR);
-        //    return;
-        //}
+    //if (MH_CreateHook((void**)OFFSET + 0x2CC20, &CG_GetViewFov_hook, (void**)&CG_GetViewFov_og) != MH_OK) {
+    //    MessageBoxW(NULL, L"FAILED TO HOOK", L"Error", MB_OK | MB_ICONERROR);
+    //    return;
+    //}
 
-    // CG_DrawWeaponSelect
+// CG_DrawWeaponSelect
     CreateMidHook(cg(0x30033A41, 0x30046C5B), [](SafetyHookContext& ctx) {
         auto config = FindMenuConfig("weaponinfo");
         if (config && config->alignment.h_right) {
@@ -1593,8 +1598,9 @@ void codDLLhooks(HMODULE handle) {
 
     Item_Paint_cg = CreateInlineHook(OFFSET + LoadedGame->Item_Paint, Item_Paint_cg_f);
 
-    if (cg(1, 0)) {
-        DrawObjectives = CreateMidHook(OFFSET + 0x12900, [](SafetyHookContext& ctx) {
+    pat = hook::pattern(handle, "50 51 6A ? FF 15 ? ? ? ? 83 C4 ? 83 C4 ? C3 ? ? ? ? ? ? ? ? ? ? ? ? ? ? ? 83 EC");
+    if (!pat.empty()) {
+        DrawObjectives = CreateMidHook(pat.get_first(), [](SafetyHookContext& ctx) {
             auto menuConfig = FindMenuConfig("Compass");
             if (menuConfig && menuConfig->alignment.h_left) {
 
@@ -1606,6 +1612,7 @@ void codDLLhooks(HMODULE handle) {
 
             });
     }
+
     auto SingleHudElem_ptr = cg(0x3001FB14, 0x3002A4C4);
     if (SingleHudElem_ptr) {
         Memory::VP::InterceptCall(SingleHudElem_ptr, DrawSingleHudElem2dog, DrawSingleHudElem2dHook);
