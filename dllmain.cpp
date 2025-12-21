@@ -1855,7 +1855,7 @@ void InitHook() {
 
     
 
-    Memory::VP::InjectHook(0x00411757, Con_DrawConsole);
+    //Memory::VP::InjectHook(0x00411757, Con_DrawConsole);
 
     //SCR_AdjustFrom640_OG = safetyhook::create_inline(0x411070, SCR_AdjustFrom640);
 
