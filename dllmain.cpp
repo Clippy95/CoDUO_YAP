@@ -26,6 +26,10 @@
 #define SCREEN_WIDTH        640
 #define SCREEN_HEIGHT       480
 
+#define MAX_CVARS_OLD 1024
+
+#define MAX_CVARS_NEW 2048
+
 static std::vector<std::unique_ptr<SafetyHookInline>> g_inlineHooks;
 static std::vector<std::unique_ptr<SafetyHookMid>> g_midHooks;
 
@@ -79,6 +83,11 @@ inline Ret thiscall_call(uintptr_t addr, Args... args) {
 typedef cvar_t* (__cdecl* Cvar_GetT)(const char* var_name, const char* var_value, int flags);
 Cvar_GetT Cvar_Get = (Cvar_GetT)NULL;
 
+// SP Only
+
+cvar_t* g_save_allowbadchecksum;
+
+// cvars
 cvar_t* cg_fovMin;
 cvar_t* cg_fovscale;
 cvar_t* cg_fovfixaspectratio;
@@ -678,7 +687,9 @@ int Cvar_Init_hook() {
     r_mode_auto = Cvar_Get((char*)"r_mode_auto", "0", CVAR_ARCHIVE);
     player_sprintmult = Cvar_Get("player_sprintmult", "0.66666669", CVAR_CHEAT);
 
-
+    if (sp_mp(1)) {
+        g_save_allowbadchecksum = Cvar_Get("g_save_allowbadchecksum", "0", 1);
+    }
 
     return result;
 }
@@ -1549,6 +1560,7 @@ void game_hooks(HMODULE handle) {
         return;
     uintptr_t OFFSET = (uintptr_t)handle;
     game_offset = OFFSET;
+    if(g_save_allowbadchecksum && g_save_allowbadchecksum->integer)
     Memory::VP::Nop(g(0x200306C8), 5);
 
     if (player_sprintmult) {
