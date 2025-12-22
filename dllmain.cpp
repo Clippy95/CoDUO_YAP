@@ -1836,7 +1836,7 @@ void codDLLhooks(HMODULE handle) {
             });
     }
 
-    auto FOV_ads_2 = cg(0x3002CDCD, 0x300401E5);
+    auto FOV_ads_2 = cg(0x3002CE48, 0x300401E5);
     if (FOV_ads_2) {
         Memory::VP::Nop(FOV_ads_2, 6);
         CreateMidHook(FOV_ads_2, [](SafetyHookContext& ctx) {
