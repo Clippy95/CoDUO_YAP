@@ -1753,7 +1753,17 @@ void codDLLhooks(HMODULE handle) {
     
 }
 
+int resolution_modded[2];
 
+void Resolution_Static_mod(cvar_s* cvar) {
+    int* res = (int*)LoadedGame->X_res_Addr;
+    if (cvar && cvar->integer) {
+        resolution_modded[0] = res[1] * STANDARD_ASPECT;
+    }
+    else {
+        resolution_modded[0] = res[0];
+    }
+}
 
 
 SafetyHookInline Cvar_Set_og;
@@ -1764,8 +1774,12 @@ cvar_s* __cdecl Cvar_Set(const char* cvar_name, const char* value, BOOL force) {
         //printf("cvar_name %s value %s cvar ptr %p\n", cvar_name, value, result);
     }
 
-    if (result && result->name && (strcmp(result->name, "safeArea_horizontal") == 0)) {
+    if (result == safeArea_horizontal) {
         StaticInstructionPatches(NULL,false);
+    } 
+    // If I need another one of these i'll have to make a map lol
+    else if (result == cg_fixaspect) {
+        Resolution_Static_mod(result);
     }
 
     return result;
@@ -1832,8 +1846,6 @@ int __cdecl com_init_hook() {
     return result;
 
 }
-
-int resolution_modded[2];
 
 void InitHook() {
     CheckGame();
@@ -1949,11 +1961,7 @@ void InitHook() {
     if (!pat.empty()) {
         static auto R_init_end = safetyhook::create_mid(pat.get_first(), [](SafetyHookContext& ctx) {
 
-            int* res = (int*)LoadedGame->X_res_Addr;
-
-            resolution_modded[0] = res[1] * STANDARD_ASPECT;
-
-            printf("res %d %d %p\n", resolution_modded[0], res[1], resolution_modded);
+            Resolution_Static_mod(cg_fixaspect);
 
             });
     }
