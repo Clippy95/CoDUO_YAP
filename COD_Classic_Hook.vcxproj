@@ -54,6 +54,7 @@
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
+    <Import Project="$(VCTargetsPath)\BuildCustomizations\masm.props" />
   </ImportGroup>
   <ImportGroup Label="Shared">
   </ImportGroup>
@@ -93,6 +94,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableUAC>false</EnableUAC>
       <AdditionalLibraryDirectories>$(ProjectDir)lib\$(Configuration)</AdditionalLibraryDirectories>
+      <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
     </Link>
     <PreBuildEvent>
       <Command>pushd "$(SolutionDir)include\extra"
@@ -121,6 +123,7 @@ popd</Command>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableUAC>false</EnableUAC>
       <AdditionalLibraryDirectories>$(ProjectDir)lib\$(Configuration)</AdditionalLibraryDirectories>
+      <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
     </Link>
     <PreBuildEvent>
       <Command>pushd "$(SolutionDir)include\extra"
@@ -166,6 +169,7 @@ popd</Command>
   <ItemGroup>
     <ClInclude Include="framework.h" />
     <ClInclude Include="Hooking.Patterns.h" />
+    <ClInclude Include="include\helper.hpp" />
     <ClInclude Include="MemoryMgr.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="safetyhook.hpp" />
@@ -185,7 +189,13 @@ popd</Command>
     <ClCompile Include="safetyhook.cpp" />
     <ClCompile Include="Zydis.c" />
   </ItemGroup>
+  <ItemGroup>
+    <MASM Include="include\fpu_ops_x86.asm">
+      <FileType>Document</FileType>
+    </MASM>
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
+    <Import Project="$(VCTargetsPath)\BuildCustomizations\masm.targets" />
   </ImportGroup>
 </Project>

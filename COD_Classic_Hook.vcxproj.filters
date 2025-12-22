@@ -42,6 +42,9 @@
     <ClInclude Include="structs.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="include\helper.hpp">
+      <Filter>include</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp">
@@ -59,5 +62,10 @@
     <ClCompile Include="Zydis.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <MASM Include="include\fpu_ops_x86.asm">
+      <Filter>include</Filter>
+    </MASM>
   </ItemGroup>
 </Project>

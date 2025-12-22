@@ -23,6 +23,8 @@
 
 #include "Hooking.Patterns.h"
 
+#include <helper.hpp>
+
 #define SCREEN_WIDTH        640
 #define SCREEN_HEIGHT       480
 
@@ -88,6 +90,9 @@ Cvar_GetT Cvar_Get = (Cvar_GetT)NULL;
 cvar_t* g_save_allowbadchecksum;
 
 // cvars
+cvar_t* cg_fov;
+cvar_t* cg_fovscale_ads;
+cvar_t* cg_fov_fix_lowfovads;
 cvar_t* cg_fovMin;
 cvar_t* cg_fovscale;
 cvar_t* cg_fovfixaspectratio;
@@ -268,7 +273,7 @@ uintptr_t sp_mp(uintptr_t CODUOSP, uintptr_t CODUOMP = 0) {
 }
 
 cvar_s* __cdecl Cvar_Find(const char* a1) {
-    return cdecl_call<cvar_s*>(0x00433700,a1);
+    return cdecl_call<cvar_s*>(exe(0x00433700,0x0043D8F0),a1);
 }
 
 void trap_R_SetColor(float* rgba) {
@@ -330,6 +335,11 @@ double CG_GetViewFov_hook() {
             fov = 2.0 * atan(tanHalfFov) * (180.0 / M_PI);
         }
     }
+    
+    if (std::isnan(fov)) {
+        return cg_fov != NULL ? cg_fov->value : 80.f;
+    }
+
     return fov;
 }
 
@@ -671,18 +681,21 @@ uintptr_t InsideWinMain;
 uintptr_t cvar_init_og;
 
 int Cvar_Init_hook() {
+    int* size_cvars = (int*)0x4805EC0;
     r_ext_texture_filter_anisotropic = Cvar_Get("r_ext_texture_filter_anisotropic", "1", CVAR_ARCHIVE | CVAR_LATCH);
+    printf("cvar_init cvar hooks cvar_get ptr %p size %d\n", Cvar_Get, *size_cvars);
     auto result = cdecl_call<int>(cvar_init_og);
 
-    int& size_cvars = *(int*)0x4805EC0;
-    printf("cvar_init cvar hooks cvar_get ptr %p size %d\n", Cvar_Get, size_cvars);
+
     cg_fovMin = Cvar_Get((char*)"cg_fovMin", "1.0", CVAR_ARCHIVE);
     cg_fovscale = Cvar_Get((char*)"cg_fovscale", "1.0", CVAR_ARCHIVE);
+    cg_fovscale_ads = Cvar_Get((char*)"cg_fovscale_ads", "1.0", CVAR_ARCHIVE);
+    cg_fov_fix_lowfovads = Cvar_Get((char*)"cg_fov_fix_lowfovads", "0", CVAR_ARCHIVE);
     cg_fovfixaspectratio = Cvar_Get((char*)"cg_fixaspectFOV", "1", CVAR_ARCHIVE);
     cg_fixaspect = Cvar_Get((char*)"cg_fixaspect", "1", CVAR_ARCHIVE);
     safeArea_horizontal = Cvar_Get((char*)"safeArea_horizontal", "1.0", CVAR_ARCHIVE);
     safeArea_vertical = Cvar_Get((char*)"safeArea_vertical", "1.0", CVAR_ARCHIVE);
-    printf("safearea ptr return %p size after %d\n", safeArea_horizontal, size_cvars);
+    printf("safearea ptr return %p size after %d\n", safeArea_horizontal, *size_cvars);
     r_noborder = Cvar_Get((char*)"r_noborder", "0", CVAR_ARCHIVE);
     r_mode_auto = Cvar_Get((char*)"r_mode_auto", "0", CVAR_ARCHIVE);
     player_sprintmult = Cvar_Get("player_sprintmult", "0.66666669", CVAR_CHEAT);
@@ -780,39 +793,42 @@ int __cdecl CG_DrawPic(float a1, float a2, float a3, float a4, int a5) {
 static float adjustments[10];
 
 void _cdecl crosshair_render_hook(float x, float y, float width, float height, int unk1, float u1, float u2, float v1, float rotation, int shaderHandle) {
-    int side;
-    __asm mov side, esi
+    if (cg_fixaspect && cg_fixaspect->integer == 2) {
+        int side;
+        __asm mov side, esi
 
-    float aspect = GetAspectRatio();
-    float aspectRatio = aspect / (4.0f / 3.0f);
+        float aspect = GetAspectRatio();
+        float aspectRatio = aspect / (4.0f / 3.0f);
 
-    static float horizontal_width_mult = 1.0f;
-    static float horizontal_height_mult = 1.0f;
-    static float vertical_width_mult = 1.0f;
-    static float vertical_height_mult = 1.0f;
-    static float x_offset_mult = 0.0f;  // Try 0 first (no centering)
-    static float y_offset_mult = 0.0f;
+        static float horizontal_width_mult = 1.0f;
+        static float horizontal_height_mult = 1.0f;
+        static float vertical_width_mult = 1.0f;
+        static float vertical_height_mult = 1.0f;
+        static float x_offset_mult = 0.0f;  // Try 0 first (no centering)
+        static float y_offset_mult = 0.0f;
 
-    float orig_width = width;
-    float orig_height = height;
+        float orig_width = width;
+        float orig_height = height;
 
-    bool is_horizontal = (side == 0 || side == 2);
+        bool is_horizontal = (side == 0 || side == 2);
+        if(cg_fixaspect->integer == 3)
+        printf("horz %p %p vert %p %p\n", &horizontal_width_mult, &horizontal_height_mult, &vertical_width_mult, &vertical_height_mult);
 
-    if (is_horizontal) {
-        width *= aspectRatio * horizontal_width_mult;
-        height *= aspectRatio * horizontal_height_mult;
+        if (is_horizontal) {
+            width *= aspectRatio * horizontal_width_mult;
+            height *= aspectRatio * horizontal_height_mult;
+        }
+        else {
+            width *= aspectRatio * vertical_width_mult;
+            height *= aspectRatio * vertical_height_mult;
+        }
+
+        x -= ((width - orig_width) / 2.0f) * x_offset_mult;
+        y -= ((height - orig_height) / 2.0f) * y_offset_mult;
+
+        //printf("side=%d, x_off_mult=%.3f (%p), y_off_mult=%.3f (%p)\n",
+        //    side, x_offset_mult, &x_offset_mult, y_offset_mult, &y_offset_mult);
     }
-    else {
-        width *= aspectRatio * vertical_width_mult;
-        height *= aspectRatio * vertical_height_mult;
-    }
-
-    x -= ((width - orig_width) / 2.0f) * x_offset_mult;
-    y -= ((height - orig_height) / 2.0f) * y_offset_mult;
-
-    //printf("side=%d, x_off_mult=%.3f (%p), y_off_mult=%.3f (%p)\n",
-    //    side, x_offset_mult, &x_offset_mult, y_offset_mult, &y_offset_mult);
-
     cdecl_call<void>(crosshair_render_func, x, y, width, height, unk1, u1, u2, v1, rotation, shaderHandle);
 }
 
@@ -1589,6 +1605,27 @@ int __cdecl SCR_DrawString_hook_possible1(float x, float y, float width, float h
     return SCR_DrawString_hook_possible1_detour->unsafe_ccall<int>(x, y, width, height);
 }
 
+void HandleWeaponADS_hack(float* current_weapon_fov) {
+    if (cg_fov) {
+        if (cg_fov_fix_lowfovads && cg_fov_fix_lowfovads->integer == 1) {
+            if (cg_fov->value < *current_weapon_fov) {
+                float value = cg_fov->value / 80.f;
+                *current_weapon_fov *= value;
+            }
+        }
+        else if (cg_fov_fix_lowfovads && cg_fov_fix_lowfovads->integer >= 2) {
+            if (cg_fov->value < 80.f) {
+                float value = cg_fov->value / 80.f;
+                *current_weapon_fov *= value;
+            }
+        }
+    }
+
+    if (cg_fovscale_ads) {
+        *current_weapon_fov *= std::clamp(cg_fovscale_ads->value, 0.1f, FLT_MAX);
+    }
+
+}
 
 void codDLLhooks(HMODULE handle) {
     // printf("run");
@@ -1749,8 +1786,54 @@ void codDLLhooks(HMODULE handle) {
         }
 
         });
-    
-    
+
+    cg_fov = Cvar_Find("cg_fov");
+
+    if (sp_mp(0, 1)) {
+        // make CG_FOV archive in MP
+        Memory::VP::Patch<int>(cg(0, 0x3008523C), CVAR_ARCHIVE);
+    }
+
+    if (cg(0x3002CDCD)) {
+        Memory::VP::Nop(cg(0x3002CDCD), 6);
+        CreateMidHook(cg(0x3002CDCD), [](SafetyHookContext& ctx) {
+
+            float current_weapon_ads = *(float*)(ctx.eax + 0x274);
+
+            HandleWeaponADS_hack(&current_weapon_ads);
+
+            FPU::FLD(current_weapon_ads);
+
+
+            });
+    }
+    else if (cg(0, 0x30040167)) {
+        CreateMidHook(cg(0,0x30040167), [](SafetyHookContext& ctx) {
+
+
+            HandleWeaponADS_hack((float*)&ctx.eax);
+
+            });
+    }
+
+    auto FOV_ads_2 = cg(0x3002CDCD, 0x300401E5);
+    if (FOV_ads_2) {
+        Memory::VP::Nop(FOV_ads_2, 6);
+        CreateMidHook(FOV_ads_2, [](SafetyHookContext& ctx) {
+            bool isSP = sp_mp(1);
+
+            auto ptr = isSP ? ctx.edx : ctx.ecx;
+
+            float current_weapon_ads = *(float*)(ptr + 0x274);
+
+
+            HandleWeaponADS_hack(&current_weapon_ads);
+
+            FPU::FSUB(current_weapon_ads);
+
+
+            });
+    }
 }
 
 int resolution_modded[2];
@@ -1839,11 +1922,47 @@ int __stdcall qglTexParameteri_aniso_hook2(int a1, int a2, int a3) {
 
 SafetyHookInline com_initd;
 
-int __cdecl com_init_hook() {
-    auto result = com_initd.unsafe_ccall<int>();
 
+int __cdecl com_init_hook(void* unknown) {
+    auto result = com_initd.unsafe_ccall<int>(unknown);
+
+    char buffer[512]{};
+
+    auto version = Cvar_Find("version");
+
+    if (version && version->string) {
+
+        sprintf_s(buffer, sizeof(buffer), "CCH r%d %s %s", BUILD_NUMBER, BUILD_TIME_UTC,COMMIT_HASH);
+
+        hook_version = Cvar_Get("hook_version", buffer, CVAR_ROM);
+
+        auto pattern = hook::pattern("8B 15 ? ? ? ? 8B 42 ? 83 C4 ? 8D 78");
+        if (!pattern.empty()) {
+            Memory::VP::Patch<cvar_s**>(pattern.get_first(2), &hook_version);
+        }
+
+    }
 
     return result;
+
+}
+
+SafetyHookInline Cvar_getD;
+
+static bool remove_cheat_flags = false;
+cvar_s* disable_cheats;
+cvar_t* Cvar_get_Hook(const char* name, const char* value, int flags) {
+
+    if (!remove_cheat_flags) {
+        remove_cheat_flags = true;
+        disable_cheats = Cvar_getD.unsafe_ccall<cvar_s*>("disable_cheats_flags", "0", CVAR_ARCHIVE);
+    }
+
+    if (disable_cheats && disable_cheats->integer && flags & CVAR_CHEAT)
+        flags &= ~CVAR_CHEAT;
+
+    return Cvar_getD.unsafe_ccall<cvar_s*>(name,value,flags);
+
 
 }
 
@@ -1854,9 +1973,11 @@ void InitHook() {
         return;
     }
 
+    Cvar_getD = safetyhook::create_inline(LoadedGame->Cvar_Get_Addr, Cvar_get_Hook);
+
     InitializeDisplayModesForGame();
 
-    //com_initd = safetyhook::create_inline(exe(0x00431CA0, 0x0043BC10), com_init_hook);
+    com_initd = safetyhook::create_inline(exe(0x00431CA0, 0x0043BC10), com_init_hook);
 
     auto pat = hook::pattern("FF 15 ? ? ? ? 8B 15 ? ? ? ? 52 E9");
 
