@@ -48,6 +48,9 @@
     <ClInclude Include="cevar.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="rinput.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp">
@@ -66,6 +69,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="cevars.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="rinput.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="game.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

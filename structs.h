@@ -1,5 +1,5 @@
 #pragma once
-
+#include "shared.h"
 #include <stdint.h>
 
 
@@ -319,4 +319,11 @@ struct hudelem_s
     char text[4];
     int32_t sort;
     int32_t foreground;
+};
+
+struct keyCatchers_s {
+    uint32_t console : 1;
+    uint32_t ui : 1;
+    uint32_t message : 1;
+    uint32_t cgame : 1;
 };

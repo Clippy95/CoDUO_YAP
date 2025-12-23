@@ -1,5 +1,5 @@
 // dllmain.cpp : Defines the entry point for the DLL application.
-
+import game;
 #include "pch.h"
 //#include "MinHook.h"
 #include <windows.h>
@@ -23,6 +23,7 @@
 
 #include "Hooking.Patterns.h"
 #include "cevar.h"
+#include "rinput.h"
 
 
 
@@ -59,29 +60,6 @@ SafetyHookMid* CreateMidHook(T target, safetyhook::MidHookFn destination, safety
 }
 
 
-// cdecl
-template<typename Ret, typename... Args>
-inline Ret cdecl_call(uintptr_t addr, Args... args) {
-    return reinterpret_cast<Ret(__cdecl*)(Args...)>(addr)(args...);
-}
-
-// stdcall
-template<typename Ret, typename... Args>
-inline Ret stdcall_call(uintptr_t addr, Args... args) {
-    return reinterpret_cast<Ret(__stdcall*)(Args...)>(addr)(args...);
-}
-
-// fastcall
-template<typename Ret, typename... Args>
-inline Ret fastcall_call(uintptr_t addr, Args... args) {
-    return reinterpret_cast<Ret(__fastcall*)(Args...)>(addr)(args...);
-}
-
-// thiscall
-template<typename Ret, typename... Args>
-inline Ret thiscall_call(uintptr_t addr, Args... args) {
-    return reinterpret_cast<Ret(__thiscall*)(Args...)>(addr)(args...);
-}
 
 typedef cvar_t* (__cdecl* Cvar_GetT)(const char* var_name, const char* var_value, int flags);
 Cvar_GetT Cvar_Get = (Cvar_GetT)NULL;
@@ -245,7 +223,7 @@ SAFETYHOOK_NOINLINE uintptr_t g(uintptr_t CODUOSP, uintptr_t CODUOMP = 0) {
 
 
 
-SAFETYHOOK_NOINLINE uintptr_t exe(uintptr_t CODUOSP, uintptr_t CODUOMP = 0) {
+SAFETYHOOK_NOINLINE uintptr_t exe(uintptr_t CODUOSP, uintptr_t CODUOMP) {
 
     if (!LoadedGame)
         return NULL;
@@ -706,6 +684,8 @@ int Cvar_Init_hook() {
     cg_fovMin = Cevar_Get("cg_fovMin", 1.f, CVAR_ARCHIVE, 1.f, 160.f);
 
     Cevar_Get("cg_fov", 80.f, CVAR_ARCHIVE, 1.f, 160.f);
+
+    rinput::raw_input = Cevar_Get("m_rawinput", 0, CVAR_ARCHIVE, 0, 1);
 
     cg_fovscale = Cvar_Get((char*)"cg_fovscale", "1.0", CVAR_ARCHIVE);
     cg_fovscale_ads = Cvar_Get((char*)"cg_fovscale_ads", "1.0", CVAR_ARCHIVE);
@@ -1681,6 +1661,11 @@ void codDLLhooks(HMODULE handle) {
 
     CG_DrawPicAddr = cg(0x30013B70, 0x3001CAA0);
 
+
+    if (sp_mp(0, 1)) {
+        Memory::VP::Nop(cg(0, 0x3004000A), 8);
+    }
+
     CG_GetViewFov_og_S = CreateInlineHook(OFFSET + LoadedGame->DLL_CG_GetViewFov_offset, &CG_GetViewFov_hook);
     //if (MH_CreateHook((void**)OFFSET + 0x2CC20, &CG_GetViewFov_hook, (void**)&CG_GetViewFov_og) != MH_OK) {
     //    MessageBoxW(NULL, L"FAILED TO HOOK", L"Error", MB_OK | MB_ICONERROR);
@@ -1743,7 +1728,6 @@ void codDLLhooks(HMODULE handle) {
             height = (float*)(ctx.esp + 0x10);
         }
 
-        printf("x: %f y %f width %f height %f\n", *x, *y, *width, *height);
         auto isAlignX = [elem](const alignx_e alig_type) {
             if (!elem) {
                 return false;
@@ -2041,6 +2025,9 @@ void InitHook() {
         return;
     }
     SetProcessDPIAware();
+
+    rinput::Init();
+
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     Cvar_getD = safetyhook::create_inline(LoadedGame->Cvar_Get_Addr, Cvar_get_Hook);
 
@@ -2050,6 +2037,7 @@ void InitHook() {
 
     auto pat = hook::pattern("FF 15 ? ? ? ? 8B 15 ? ? ? ? 52 E9");
 
+    gexe::keyCatchers = (uint32_t*)exe(0x4842104);
 
     if (!pat.empty()) {
 
