@@ -817,22 +817,41 @@ cevar_t* crosshair_scale_h;
 void _cdecl crosshair_render_hook(float x, float y, float width, float height, int unk1, float u1, float u2, float v1, float rotation, int shaderHandle) {
     int side;
     __asm mov side, esi
-
     bool is_horizontal = !(side == 0 || side == 2);
 
-
-
+    float og_x = x;
+    float og_y = y;
 
     if (is_horizontal) {
         float temp_x = x, temp_y = y;
-        CG_AdjustFrom640(&temp_x, &temp_y, &height, &width);
-        x = temp_x + (height - width) / 2.0f;
-        y = temp_y + (width - height) / 2.0f;
+        float temp_width = width, temp_height = height;
+
+        CG_AdjustFrom640(&temp_x, &temp_y, &temp_height, &temp_width);
+
+        x = temp_x + (temp_height - temp_width) / 2.0f;
+        y = temp_y + (temp_width - temp_height) / 2.0f;
+
+        // Use a symmetric correction for both sides
+        // At 21:9, we need +4.0 for right and -4.0 for left
+        // That's 1.0 * screenXScale
+        float aspect_correction = (*cg_screenXScale);
+        static cevar_s* cg_crosshair_fuck;
+        if (!cg_crosshair_fuck)
+            cg_crosshair_fuck = Cevar_Get("cg_crosshair_fuck", 0, 0);
+        if (GetAspectRatio() > STANDARD_ASPECT && cg_crosshair_fuck && cg_crosshair_fuck->base->integer) {
+            if (side == 1) {
+                x += aspect_correction;
+            }
+            else if (side == 3) {
+                x -= aspect_correction;
+            }
+        }
+        width = temp_width;
+        height = temp_height;
     }
     else {
         CG_AdjustFrom640(&x, &y, &width, &height);
     }
-
 
     cdecl_call<void>(crosshair_render_func, x, y, width, height, unk1, u1, u2, v1, rotation, shaderHandle);
 }
@@ -1668,15 +1687,17 @@ void codDLLhooks(HMODULE handle) {
     Memory::VP::Patch<void*>(y_scale_ptr, &DEFAULT_1_0);
     Memory::VP::Patch<void*>(x_scale_ptr, &DEFAULT_1_0);
 
+    printf("DEFAULT_1_0 %p\n", &DEFAULT_1_0);
+
     Memory::VP::Patch<void*>(cg(0x30011F51 + 2,0x3001A484 + 2), &DEFUALT_SCREEN_WIDTH);
     Memory::VP::Patch<void*>(cg(0x30011F03 + 2,0x3001A436 + 2), &DEFUALT_SCREEN_HEIGHT);
 
 
     Memory::VP::InterceptCall(cg(0x30011F68, 0x3001A49B), crosshair_render_func, crosshair_render_hook);
 
-    Memory::VP::InterceptCall(cg(0x30011222, 0x30019752), trap_R_DrawStretchPic, R_DrawStretchPic_leftsniper);
+    //Memory::VP::InterceptCall(cg(0x30011222, 0x30019752), trap_R_DrawStretchPic, R_DrawStretchPic_leftsniper);
 
-    Memory::VP::InterceptCall(cg(0x30011270, 0x300197A0), trap_R_DrawStretchPic, R_DrawStretchPic_rightsniper);
+    //Memory::VP::InterceptCall(cg(0x30011270, 0x300197A0), trap_R_DrawStretchPic, R_DrawStretchPic_rightsniper);
 
     Memory::VP::Nop(cg(0x30011205, 0x30019735), 2);
 
