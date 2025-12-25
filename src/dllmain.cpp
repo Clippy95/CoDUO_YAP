@@ -82,14 +82,14 @@ cevar_t* cg_fixaspect;
 cvar_t* safeArea_horizontal;
 cvar_t* safeArea_vertical;
 cvar_t* r_noborder;
-cvar_t* r_mode_auto;
+cevar_t* r_mode_auto;
 cvar_t* player_sprintmult;
 
 cvar_t* hook_shortversion;
 
 cvar_t* hook_version;
 
-cvar_t* r_ext_texture_filter_anisotropic;
+cevar_t* r_ext_texture_filter_anisotropic;
 
 
 void codDLLhooks(HMODULE handle);
@@ -676,7 +676,7 @@ uintptr_t cvar_init_og;
 
 int Cvar_Init_hook() {
     int* size_cvars = (int*)0x4805EC0;
-    r_ext_texture_filter_anisotropic = Cvar_Get("r_ext_texture_filter_anisotropic", "1", CVAR_ARCHIVE | CVAR_LATCH);
+    r_ext_texture_filter_anisotropic = Cevar_Get("r_ext_texture_filter_anisotropic", 16, CVAR_ARCHIVE | CVAR_LATCH, 1, 16);
     printf("cvar_init cvar hooks cvar_get ptr %p size %d\n", Cvar_Get, *size_cvars);
     auto result = cdecl_call<int>(cvar_init_og);
 
@@ -690,14 +690,14 @@ int Cvar_Init_hook() {
     cg_fovscale = Cvar_Get((char*)"cg_fovscale", "1.0", CVAR_ARCHIVE);
     cg_fovscale_ads = Cvar_Get((char*)"cg_fovscale_ads", "1.0", CVAR_ARCHIVE);
 
-    cg_fov_fix_lowfovads = Cevar_Get((char*)"cg_fov_fix_lowfovads", 0, CVAR_ARCHIVE,0,2);
+    cg_fov_fix_lowfovads = Cevar_Get((char*)"cg_fov_fix_lowfovads", 0, CVAR_ARCHIVE, 0, 2);
     cg_fovfixaspectratio = Cvar_Get((char*)"cg_fixaspectFOV", "1", CVAR_ARCHIVE);
-    cg_fixaspect = Cevar_Get((char*)"cg_fixaspect", 0, CVAR_ARCHIVE,0,3, Resolution_Static_mod);
+    cg_fixaspect = Cevar_Get((char*)"cg_fixaspect", 1, CVAR_ARCHIVE, 0, 3, Resolution_Static_mod);
     safeArea_horizontal = Cvar_Get((char*)"safeArea_horizontal", "1.0", CVAR_ARCHIVE);
     safeArea_vertical = Cvar_Get((char*)"safeArea_vertical", "1.0", CVAR_ARCHIVE);
     printf("safearea ptr return %p size after %d\n", safeArea_horizontal, *size_cvars);
     r_noborder = Cvar_Get((char*)"r_noborder", "0", CVAR_ARCHIVE);
-    r_mode_auto = Cvar_Get((char*)"r_mode_auto", "0", CVAR_ARCHIVE);
+    r_mode_auto = Cevar_Get((char*)"r_mode_auto", 0, CVAR_ARCHIVE | CVAR_LATCH, 0, 1);
     player_sprintmult = Cvar_Get("player_sprintmult", "0.66666669", CVAR_CHEAT);
 
     if (sp_mp(1)) {
@@ -1978,7 +1978,7 @@ bool GL_EXT_texture_filter_anisotropic_supported = false;
 int __stdcall qglTexParameteri_aniso_hook1(int a1, int a2, int a3) {
     int filter_value = 1;
     if (r_ext_texture_filter_anisotropic) {
-        filter_value = std::clamp(r_ext_texture_filter_anisotropic->integer, 1, 16);
+        filter_value = std::clamp(r_ext_texture_filter_anisotropic->base->integer, 1, 16);
     }
     if(GL_EXT_texture_filter_anisotropic_supported)
     stdcall_call<int>(*(int*)qglTexParameteri_ptr, a1, 0x84FE, filter_value);
@@ -2217,7 +2217,7 @@ void InitHook() {
                 unsigned int* width = (unsigned int*)ctx.esi;
                 unsigned int* height = (unsigned int*)ctx.edx;
 
-                if (r_mode_auto && r_mode_auto->integer) {
+                if (r_mode_auto && r_mode_auto->base->integer) {
                     *width = GetSystemMetrics(SM_CXSCREEN);
                     *height = GetSystemMetrics(SM_CYSCREEN);
                 }
