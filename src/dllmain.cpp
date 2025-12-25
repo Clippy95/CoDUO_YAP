@@ -1694,9 +1694,9 @@ void codDLLhooks(HMODULE handle) {
 
     Memory::VP::InterceptCall(cg(0x30011F68, 0x3001A49B), crosshair_render_func, crosshair_render_hook);
 
-    //Memory::VP::InterceptCall(cg(0x30011222, 0x30019752), trap_R_DrawStretchPic, R_DrawStretchPic_leftsniper);
+    Memory::VP::InterceptCall(cg(0x30011222, 0x30019752), trap_R_DrawStretchPic, R_DrawStretchPic_leftsniper);
 
-    //Memory::VP::InterceptCall(cg(0x30011270, 0x300197A0), trap_R_DrawStretchPic, R_DrawStretchPic_rightsniper);
+    Memory::VP::InterceptCall(cg(0x30011270, 0x300197A0), trap_R_DrawStretchPic, R_DrawStretchPic_rightsniper);
 
     Memory::VP::Nop(cg(0x30011205, 0x30019735), 2);
 
