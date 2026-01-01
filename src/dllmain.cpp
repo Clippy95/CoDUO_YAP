@@ -87,6 +87,7 @@ cvar_t* safeArea_horizontal;
 cvar_t* safeArea_vertical;
 cvar_t* r_noborder;
 cevar_t* r_mode_auto;
+cevar_t* cg_blackshader_hack_forall;
 
 cvar_t* player_sprintmult;
 
@@ -712,6 +713,7 @@ int Cvar_Init_hook() {
     printf("safearea ptr return %p size after %d\n", safeArea_horizontal, *size_cvars);
     r_noborder = Cvar_Get((char*)"r_noborder", "0", CVAR_ARCHIVE);
     r_mode_auto = Cevar_Get((char*)"r_mode_auto", 0, CVAR_ARCHIVE | CVAR_LATCH, 0, 1);
+    cg_blackshader_hack_forall = Cevar_Get((char*)"cg_blackshader_hack_forall", 1, CVAR_ARCHIVE, 0, 1);
     player_sprintmult = Cvar_Get("player_sprintmult", "0.66666669", CVAR_CHEAT);
 
     if (sp_mp(1)) {
@@ -1926,7 +1928,7 @@ void codDLLhooks(HMODULE handle) {
 
         bool is_black_screen = (strcmp(hud_elem_shader_name, "black") == 0);
 
-        bool shouldStretch = (is_black_screen && (*width >= 640 && *height >= 480)) ||
+        bool shouldStretch = (is_black_screen && ((*width >= 640 && *height >= 480) || (cg_blackshader_hack_forall && cg_blackshader_hack_forall->base && cg_blackshader_hack_forall->base->integer))  ) ||
             (shaderConfig && shaderConfig->alignment.stretch);
         if (shouldStretch) {
 
@@ -1938,6 +1940,7 @@ void codDLLhooks(HMODULE handle) {
 
             *width += process_width() * 2.f;
         }
+
         // Apply alignment-based adjustments from config
         else if (shaderConfig) {
 
