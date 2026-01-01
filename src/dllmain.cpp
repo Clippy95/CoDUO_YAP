@@ -1883,7 +1883,7 @@ void codDLLhooks(HMODULE handle) {
     if (SingleHudElem_ptr) {
         Memory::VP::InterceptCall(SingleHudElem_ptr, DrawSingleHudElem2dog, DrawSingleHudElem2dHook);
     }
-
+    static auto mapname = Cvar_Find("mapname");
     DrawHudElemMaterial_mid = CreateMidHook(cg(0x3001F8D4, 0x3002A26C), [](SafetyHookContext& ctx) {
         const char* hud_elem_shader_name = (const char*)(ctx.esp + 0x1C);
         hudelem_s* elem = (hudelem_s*)ctx.edi;
@@ -1936,7 +1936,7 @@ void codDLLhooks(HMODULE handle) {
             *width += fuckthis[0];
             *height += fuckthis[1];
 
-            *width *= (GetAspectRatio_standardfix() * 2.f);
+            *width += process_width() * 2.f;
         }
         // Apply alignment-based adjustments from config
         else if (shaderConfig) {
