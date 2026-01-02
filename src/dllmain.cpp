@@ -17,7 +17,7 @@ import game;
 
 #include "structs.h"
 
-
+#include <stacktrace>
 
 #include "Hooking.Patterns.h"
 #include "cevar.h"
@@ -2273,6 +2273,23 @@ int cvar_show_com_printf(const char* format, const char* cvar_name, const char* 
     return Com_Printf(format, cvar_name, cvar_value);
 }
 
+inline bool IsModuleUAL(HMODULE mod)
+{
+    if (GetProcAddress(mod, "IsUltimateASILoader") != NULL)
+        return true;
+    return false;
+}
+
+bool IsUALPresent() {
+    for (const auto& entry : std::stacktrace::current()) {
+        HMODULE hModule = NULL;
+        if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCSTR)entry.native_handle(), &hModule)) {
+            if (IsModuleUAL(hModule))
+                return true;
+        }
+    }
+    return false;
+}
 
 void InitHook() {
     CheckGame();
@@ -2280,6 +2297,13 @@ void InitHook() {
         MessageBoxW(NULL, L"COD CLASSIC LOAD FAILED", L"Error", MB_OK | MB_ICONWARNING);
         return;
     }
+    
+
+
+    if (!IsUALPresent()) {
+        MessageBoxA(NULL, "It appears that Ulitmate ASI Loader is missing, it's highly recommended that you use it to load the mod, otherwise expect issues!", "CoDUO_QOL", MB_OK | MB_ICONWARNING);
+    }
+
     component_loader::post_start();
     SetProcessDPIAware();
 
