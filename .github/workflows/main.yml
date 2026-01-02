@@ -24,12 +24,25 @@ jobs:
     - name: Build solution
       working-directory: ${{ env.GITHUB_WORKSPACE }}
       run: msbuild /m /p:Configuration=${{ env.BUILD_CONFIGURATION }} /p:Platform=x86 ${{ env.SOLUTION_FILE_PATH }}
+    
+    - name: Download Ultimate ASI Loader x86
+      uses: robinraju/release-downloader@v1.12
+      with:
+        repository: "ThirteenAG/Ultimate-ASI-Loader"
+        tag: "Win32-latest"
+        fileName: "ddraw-Win32.zip"
+    
     - name: Prepare output folder
+      shell: cmd
       run: |
         mkdir upload
-        copy "Release\CoDUO_QOL.asi" upload\
-        copy "Release\CoDUO_QOL.pdb" upload\
+        mkdir upload\plugins
+        7z e ddraw-Win32.zip ddraw.dll -oupload -y
+        copy "Release\CoDUO_QOL.asi" upload\plugins\
+        copy "Release\CoDUO_QOL.pdb" upload\plugins\
         xcopy gameroot\menuwide upload\menuwide /E /I /Y
+        del ddraw-Win32.zip
+    
     - name: Upload build artifact
       uses: actions/upload-artifact@v4
       with:
