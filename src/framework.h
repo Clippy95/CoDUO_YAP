@@ -9,6 +9,31 @@
 #include "buildnumber.h"
 
 #include <helper.hpp>
+#include <iostream>
+#include "Hooking.Patterns.h"
+#include "safetyhook.hpp"
+#include "shared.h"
+
+#include "MemoryMgr.h"
+
+#include <deque>
+
+#include <set>
+#include <algorithm>
+
+#include "structs.h"
+
+#include <stacktrace>
+
+
+#include "cevar.h"
+#include "rinput.h"
+#include "GMath.h"
+
+#include <filesystem>
+#include <fstream>
+#include "nlohmann/json.hpp"
+#include <unordered_map>
 
 // cdecl
 template<typename Ret, typename... Args>

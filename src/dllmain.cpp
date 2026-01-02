@@ -1,32 +1,10 @@
 // dllmain.cpp : Defines the entry point for the DLL application.
 import game;
 #include "pch.h"
+#include "game/game.h"
+#include <component_loader.h>
 //#include "MinHook.h"
-#include <windows.h>
-#include <iostream>
-#include "Hooking.Patterns.h"
-#include "safetyhook.hpp"
-#include "shared.h"
 
-#include "MemoryMgr.h"
-
-#include <deque>
-
-#include <set>
-#include <algorithm>
-
-#include "structs.h"
-
-#include <stacktrace>
-
-#include "Hooking.Patterns.h"
-#include "cevar.h"
-#include "rinput.h"
-#include "GMath.h"
-
-#include <filesystem>
-#include <fstream>
-#include "nlohmann/json.hpp"
 
 #define SCREEN_WIDTH        640
 #define SCREEN_HEIGHT       480
@@ -38,9 +16,7 @@ import game;
 static std::vector<std::unique_ptr<SafetyHookInline>> g_inlineHooks;
 static std::vector<std::unique_ptr<SafetyHookMid>> g_midHooks;
 
-#include <unordered_map>
-#include "game/game.h"
-#include <component_loader.h>
+
 
 
 static char charbuffer[2048]{};
@@ -146,7 +122,7 @@ UO_SP,
 COD_Classic_Version COD_SP = {
 {0x0046C5C0,0x83EC8B55},
 "uo_cgame_mp_x86.dll",
-"uo_mp_uix86.dll",
+"uo_ui_mp_x86.dll",
 0x452190,
 0x3FFC0,
 0x43D9E0,
@@ -2549,8 +2525,7 @@ void InitHook() {
     if (!pat.empty()) {
         Memory::VP::Patch<int*>(pat.get_first(1), resolution_modded);
     }
-    LOGPIXELSX;
-        LOGPIXELSY;
+
     SetUpFunctions();
     LoadMenuConfigs();
     LoadHudShaderConfigs();
@@ -2589,65 +2564,10 @@ void InitHook() {
 
     FreeLibraryD = safetyhook::create_inline(FreeLibrary, FreeLibraryHook);
 
-    if (Cvar_Get != NULL)
-    {
-
-
-        //Memory::VP::InjectHook(0x4D7D90, glviewport_47BD978);
-
-        //static auto test = CreateMidHook(0x004D7D90, [](SafetyHookContext& ctx) {
-
-        //    int* args = (int*)ctx.esp;
-
-        //    args[0] = process_width(0);
-
-        //    float whatever = args[2];
 
 
 
-        //    float mult = (STANDARD_ASPECT / GetAspectRatio());
 
-
-        //    whatever *= mult;
-
-        //    args[2] = (int)whatever;
-
-        //    });
-
-
-    }
-    //if (MH_Initialize() != MH_OK) {
-    //    //MessageBoxW(NULL, L"FAILED TO INITIALIZE", L"Error", MB_OK | MB_ICONERROR);
-    //    return;
-    //}
-    //if (MH_CreateHook((void**)CheckGame()->LoadDLLAddr, &hookCOD_dllLoad, (void**)&originalLoadDLL) != MH_OK) {
-    //    //MessageBoxW(NULL, L"FAILED TO HOOK", L"Error", MB_OK | MB_ICONERROR);
-    //    return;
-    //}
-
-    //originalLoadDLLd = safetyhook::CreateInlineHook(CheckGame()->LoadDLLAddr, hookCOD_dllLoad);
-
-
-    //if (MH_EnableHook(MH_ALL_HOOKS) != MH_OK) {
-    //    //MessageBoxW(NULL, L"FAILED TO ENABLE", L"Error", MB_OK | MB_ICONERROR);
-    //    return;
-    //}
-
-    //if (cg(1)) {
-    //    static auto borderless_hook1 = safetyhook::create_mid(0x00502F87, [](SafetyHookContext& ctx) {
-    //        auto& cdsFullScreen = ctx.esi;
-    //        if (r_noborder && r_noborder->integer) {
-    //            printf("fuckwit\n");
-    //            cdsFullScreen = false;
-    //            DWORD& dwStylea = *(DWORD*)(ctx.esp + 0x54);
-    //            DWORD& dwExStylea = *(DWORD*)(ctx.esp + 0x50);
-    //            dwExStylea = 0;
-    //            dwStylea = WS_POPUP | WS_SYSMENU;
-    //            ctx.eip = 0x00502FC0;
-    //        }
-
-    //        });
-    //}
 
     std::thread([&]() {
         while (!glOrtho_og.target_address()) {

@@ -44,6 +44,8 @@ jobs:
         copy "Release\CoDUO_QOL.asi" upload\plugins\
         copy "Release\CoDUO_QOL.pdb" upload\plugins\
         xcopy gameroot\menuwide upload\menuwide /E /I /Y
+        xcopy gameroot\patches upload\patches /E /I /Y
+        copy "gameroot\patch_coduo.bat" upload\
         del ddraw-Win32.zip
     
     - name: Upload build artifact

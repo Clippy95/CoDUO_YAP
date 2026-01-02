@@ -201,6 +201,7 @@ popd</Command>
     <ClCompile Include="src\rinput.cpp" />
     <ClCompile Include="include\safetyhook.cpp" />
     <ClCompile Include="include\Zydis.c" />
+    <ClCompile Include="src\steam_check.cpp" />
     <ClCompile Include="src\ui.cpp" />
     <ClCompile Include="src\weapon.cpp" />
   </ItemGroup>
