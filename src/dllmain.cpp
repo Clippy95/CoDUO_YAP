@@ -597,18 +597,6 @@ float process_height_hack_safe() {
 
 }
 
-SafetyHookInline glOrtho_og{};
-//
-//
-//
-struct OrthoParams {
-    double left;
-    double right;
-    double bottom;
-    double top;
-    double zNear;
-    double zFar;
-};
 //
 //SafetyHookInline qglViewport_og{};
 //
@@ -639,45 +627,11 @@ struct OrthoParams {
 //    qglScissor_og.unsafe_stdcall(x, y, width, height);
 //};
 
+uintptr_t* glOrtho_ptr;
 int __stdcall glOrtho_detour(double left, double right, double bottom, double top, double zNear, double zFar) {
-    static OrthoParams params = { 0, 0, 0, 0, 0, 0 };
-
-    //printf("glOrtho called from: %p\n", _ReturnAddress());
-    //printf("  left   = %.2f (addr: %p)\n", params.left, &params.left);
-    //printf("  right  = %.2f (addr: %p)\n", params.right, &params.right);
-    //printf("  bottom = %.2f (addr: %p)\n", params.bottom, &params.bottom);
-    //printf("  top    = %.2f (addr: %p)\n", params.top, &params.top);
-    //printf("  zNear  = %.2f (addr: %p)\n", params.zNear, &params.zNear);
-    //printf("  zFar   = %.2f (addr: %p)\n", params.zFar, &params.zFar);
-
-    if (_ReturnAddress() == (void*)LoadedGame->gl_ortho_ret) {
-        //printf("glOrtho called from: %p\n", _ReturnAddress());
-        //printf("  left   = %.2f (addr: %p)\n", left, &left);
-        //printf("  right  = %.2f (addr: %p)\n", right, &right);
-        //printf("  bottom = %.2f (addr: %p)\n", bottom, &bottom);
-        //printf("  top    = %.2f (addr: %p)\n", top, &top);
-        //printf("  zNear  = %.2f (addr: %p)\n", zNear, &zNear);
-        //printf("  zFar   = %.2f (addr: %p)\n", zFar, &zFar);
-        static float floatsy[2];
-        //left -= process_width(0.f) + floatsy[0];
-        //right += process_width(0.f) + floatsy[1];
-
-        left -= process_widths() + floatsy[0];
-        right += process_widths() + floatsy[1];
-
-        /*printf("left %f right %f floatsy %p\n",left,right, floatsy);*/
-
-        return glOrtho_og.unsafe_stdcall<int>(
-            left + params.left,
-            right + params.right,
-            bottom + params.bottom,
-            top + params.top,
-            zNear + params.zNear,
-            zFar + params.zFar
-        );
-    }
-
-    return glOrtho_og.unsafe_stdcall<int>(left, right, bottom, top, zNear, zFar);
+    left -= process_widths();
+    right += process_widths();
+    return stdcall_call<int>(*glOrtho_ptr, left, right, bottom, top, zNear, zFar);
 }
 
 uintptr_t InsideWinMain;
@@ -2595,20 +2549,13 @@ void InitHook() {
 
 
 
+    pat = hook::pattern("FF 15 ? ? ? ? 68 ? ? ? ? FF 15 ? ? ? ? FF 15 ? ? ? ? B8");
+    if (!pat.empty()) {
+        Memory::VP::Read(pat.get_first(2), glOrtho_ptr);
+        Memory::VP::Nop(pat.get_first(0), 6);
+        Memory::VP::InjectHook(pat.get_first(0), glOrtho_detour, Memory::VP::HookType::Call);
+    }
 
-
-
-    std::thread([&]() {
-        while (!glOrtho_og.target_address()) {
-            if (*(uintptr_t*)LoadedGame->GL_Ortho_ptr) {
-                glOrtho_og = safetyhook::create_inline(
-                    *(uintptr_t*)LoadedGame->GL_Ortho_ptr,
-                    &glOrtho_detour
-                );
-            }
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        }
-        }).detach();
 
 
 }
