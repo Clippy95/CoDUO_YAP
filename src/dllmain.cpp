@@ -487,54 +487,85 @@ HMODULE __stdcall LoadLibraryHook(const char* filename) {
 
 SafetyHookInline FreeLibraryD;
 
+bool is_shutdown = false;
+
 BOOL __stdcall FreeLibraryHook(HMODULE hLibModule) {
-    char LibraryName[256]{};
-    GetModuleFileNameA(hLibModule, LibraryName, sizeof(LibraryName));
+    if (!is_shutdown) {
+        char LibraryName[256]{};
+        GetModuleFileNameA(hLibModule, LibraryName, sizeof(LibraryName));
 
-    if (LoadedGame && LoadedGame->cgamename && (strcmp(LibraryName, LoadedGame->cgamename) == 0)) {
-        cg_game_offset = 0;
-    }
-
-    uintptr_t moduleStart = (uintptr_t)hLibModule;
-    uintptr_t moduleEnd = (uintptr_t)GetModuleEndAddress(hLibModule);
-
-    if (moduleEnd != 0) {
-        // Check inline hooks
-        for (auto& hookPtr : g_inlineHooks) {
-            if (hookPtr) {
-                uintptr_t targetAddr = (uintptr_t)hookPtr->target_address();
-                if (targetAddr >= moduleStart && targetAddr < moduleEnd) {
-                    hookPtr->reset();
-                }
-            }
+        if (LoadedGame && LoadedGame->cgamename && (strcmp(LibraryName, LoadedGame->cgamename) == 0)) {
+            cg_game_offset = 0;
+        } else if (LoadedGame && LoadedGame->cgamename && (strcmp(LibraryName, "uo_gamex86.dll") == 0)) {
+            game_offset = 0;
+        }
+        else if (LoadedGame && LoadedGame->cgamename && (strcmp(LibraryName, LoadedGame->uixname) == 0)) {
+            ui_offset = 0;
         }
 
-        // Check mid hooks
-        for (auto& hookPtr : g_midHooks) {
-            if (hookPtr) {
-                uintptr_t targetAddr = (uintptr_t)hookPtr->target_address();
-                if (targetAddr >= moduleStart && targetAddr < moduleEnd) {
-                    hookPtr->reset();
+        uintptr_t moduleStart = (uintptr_t)hLibModule;
+        uintptr_t moduleEnd = (uintptr_t)GetModuleEndAddress(hLibModule);
+
+        if (moduleEnd != 0) {
+            // Check inline hooks
+            for (auto& hookPtr : g_inlineHooks) {
+                if (hookPtr) {
+                    uintptr_t targetAddr = (uintptr_t)hookPtr->target_address();
+                    if (targetAddr >= moduleStart && targetAddr < moduleEnd) {
+                        hookPtr->reset();
+                    }
                 }
             }
+
+            // Check mid hooks
+            for (auto& hookPtr : g_midHooks) {
+                if (hookPtr) {
+                    uintptr_t targetAddr = (uintptr_t)hookPtr->target_address();
+                    if (targetAddr >= moduleStart && targetAddr < moduleEnd) {
+                        hookPtr->reset();
+                    }
+                }
+            }
+
+            // Clear out any reset hooks
+            g_inlineHooks.erase(
+                std::remove_if(g_inlineHooks.begin(), g_inlineHooks.end(),
+                    [](const std::unique_ptr<SafetyHookInline>& h) { return !h || !(*h); }),
+                g_inlineHooks.end()
+            );
+
+            g_midHooks.erase(
+                std::remove_if(g_midHooks.begin(), g_midHooks.end(),
+                    [](const std::unique_ptr<SafetyHookMid>& h) { return !h || !(*h); }),
+                g_midHooks.end()
+            );
+
         }
-
-        // Clear out any reset hooks
-        g_inlineHooks.erase(
-            std::remove_if(g_inlineHooks.begin(), g_inlineHooks.end(),
-                [](const std::unique_ptr<SafetyHookInline>& h) { return !h || !(*h); }),
-            g_inlineHooks.end()
-        );
-
-        g_midHooks.erase(
-            std::remove_if(g_midHooks.begin(), g_midHooks.end(),
-                [](const std::unique_ptr<SafetyHookMid>& h) { return !h || !(*h); }),
-            g_midHooks.end()
-        );
     }
-
     auto hModule = FreeLibraryD.unsafe_stdcall<BOOL>(hLibModule);
     return hModule;
+}
+
+void ShutdownAllHooks() {
+    for (auto& hookPtr : g_inlineHooks) {
+        if (hookPtr) {
+            hookPtr->reset();
+        }
+    }
+
+    for (auto& hookPtr : g_midHooks) {
+        if (hookPtr) {
+            hookPtr->reset();
+        }
+    }
+
+
+    g_inlineHooks.clear();
+    g_midHooks.clear();
+
+    cg_game_offset = 0;
+    game_offset = 0;
+    ui_offset = 0;
 }
 
 float get_safeArea_horizontal() {
@@ -2709,6 +2740,16 @@ void InitHook() {
         Memory::VP::InjectHook(pat.get_first(0), glOrtho_detour, Memory::VP::HookType::Call);
     }
 
+    pat = hook::pattern("85 C0 0F 85 ? ? ? ? A1 ? ? ? ? 85 C0 74 ? A1");
+    if (!pat.empty()) {
+        static auto shutdown = safetyhook::create_mid(pat.get_first(-5), [](SafetyHookContext& ctx) {
+
+            component_loader::pre_destroy();
+            // Required for steam exes otherwise crashes on unhooking
+            ShutdownAllHooks();
+
+            });
+    }
 
 
 }
@@ -2730,8 +2771,9 @@ BOOL APIENTRY DllMain( HMODULE hModule,
         break;
     case DLL_THREAD_ATTACH:
     case DLL_THREAD_DETACH:
-        //FreeConsole();
-        //MH_Uninitialize();
+
+        is_shutdown = true;
+
         break;
     case DLL_PROCESS_DETACH:
         break;
