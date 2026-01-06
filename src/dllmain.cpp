@@ -2386,7 +2386,12 @@ void InitHook() {
     std::vector<std::wstring> iniPaths;
 
 
-
+    if (sp_mp(1)) {
+        // remove CVAR_ROM from sv_cheats in SP
+        Memory::VP::Patch<uint8_t>((0x431CEF + 1), CVAR_SYSTEMINFO);
+        Memory::VP::Patch<uint8_t>((0x4AC6F1 + 1), CVAR_SYSTEMINFO);
+        Memory::VP::Patch<uint8_t>((0x44EB32 + 1), CVAR_SYSTEMINFO);
+    }
 
     std::wstring modulePath = GetModulePath(NULL);
     std::wstring moduleName = modulePath.substr(modulePath.find_last_of(L"/\\") + 1);
@@ -2413,6 +2418,7 @@ void InitHook() {
     if (!UALPresent) {
         SetUnhandledExceptionFilter(CustomUnhandledExceptionFilter);
     }
+
 
 
 
@@ -2610,18 +2616,6 @@ void InitHook() {
             Memory::VP::Patch<uint32_t>(pat.get_first(4), WS_EX_LEFT);
         }
 
-    char buffer[128]{};
-    const char* buffertosee = "UNKNOWN";
-    if (LoadedGame == &COD_UO_SP) {
-        buffertosee = "COD_UO_SP";
-    }
-    else if (LoadedGame == &COD_SP) {
-        buffertosee = "COD_UO_MP";
-    }
-
-    //sprintf_s(buffer, sizeof(buffer), "INIT START %s", buffertosee);
-    //MessageBoxA(NULL, buffer, "Error", MB_OK | MB_ICONWARNING);
-
     pat = hook::pattern("68 ? ? ? ? 56 FF 15 ? ? ? ? 83 C4 ? 5F");
     if (!pat.empty()) {
         static auto R_init_end = safetyhook::create_mid(pat.get_first(), [](SafetyHookContext& ctx) {
@@ -2666,7 +2660,6 @@ void InitHook() {
     SetUpFunctions();
     LoadMenuConfigs();
     LoadHudShaderConfigs();
-    printf("should call the cg func\n");
 
     HHOOK hook = SetWindowsHookExA(WH_CALLWNDPROC, [](int code, WPARAM w, LPARAM l) -> LRESULT {
     if (code < 0) return CallNextHookEx(NULL, code, w, l);
