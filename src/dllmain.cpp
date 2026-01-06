@@ -829,38 +829,57 @@ void _cdecl crosshair_render_hook(float x, float y, float width, float height, i
     int side;
     __asm mov side, esi
     bool is_horizontal = !(side == 0 || side == 2);
-    // HACK HACK HACK HACK TODO: PLEASE FIXME IT WORKS AND LOOKS NICE BUT I HATE THIS -Clippy95
-    static float stored_right_distance = 0.0f;
 
-    if (is_horizontal) {
-        float original_x = x;
+    static float stored_top_distance = 0.0f;
+    static float stored_arm_height   = 0.0f;
+
+    float screen_center_x = SCREEN_WIDTH  * 0.5f * (*cg_screenXScale);
+    float screen_center_y = SCREEN_HEIGHT * 0.5f * (*cg_screenYScale);
+
+    float sx = *cg_screenXScale;
+    float sy = *cg_screenYScale;
+
+    float widescreen_factor = 1.0f;
+    if (sx > sy + 0.0001f) {
+        float ratio = sx / sy;
+        widescreen_factor = ratio;
+    }
+
+    if (!is_horizontal) {
+        // top (0), bottom (2)
+        float temp_x = x, temp_y = y, temp_width = width, temp_height = height;
+        CG_AdjustFrom640(&temp_x, &temp_y, &temp_width, &temp_height);
+        x = temp_x; y = temp_y; width = temp_width; height = temp_height;
+
+        if (side == 0) {
+            stored_top_distance = fabsf(y + height * 0.5f - screen_center_y);
+            stored_arm_height   = height;
+        }
+        else if (side == 2) {
+            y = screen_center_y + stored_top_distance - height * 0.5f;
+        }
+    }
+    else {
+        // left (3), right (1)
         float temp_x = x, temp_y = y;
         float temp_width = width, temp_height = height;
 
         CG_AdjustFrom640(&temp_x, &temp_y, &temp_height, &temp_width);
+        y = temp_y + (temp_width - temp_height) * 0.5f;
 
-        x = temp_x + (temp_height - temp_width) / 2.0f;
-        y = temp_y + (temp_width - temp_height) / 2.0f;
+        float arm_half = stored_arm_height * 0.5f;
 
-        if (side == 1) {
-            stored_right_distance = fabsf(original_x - 320.0f);
-        }
-
-
-        float aspect_correction = stored_right_distance * ((*cg_screenXScale) - (*cg_screenYScale));
+        float horiz_distance = stored_top_distance * widescreen_factor;
 
         if (side == 1) {
-            x += aspect_correction;
+            x = screen_center_x + horiz_distance - arm_half;
         }
         else if (side == 3) {
-            x -= aspect_correction;
+            x = screen_center_x - horiz_distance - arm_half;
         }
 
         width = temp_width;
         height = temp_height;
-    }
-    else {
-        CG_AdjustFrom640(&x, &y, &width, &height);
     }
 
     cdecl_call<void>(crosshair_render_func, x, y, width, height, unk1, u1, u2, v1, rotation, shaderHandle);
