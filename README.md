@@ -1,7 +1,11 @@
-# CoDUO_QOL - A plugin for Call Of Duty: United Offensive
+# CoDUO_QOL - A plugin for Call of Duty: United Offensive
 Aiming to provide enhancements, quality of life features and extended features for CoDUO SP & MP with the main focus being SP
 
 
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/ada7ac00-201e-42ca-9b0d-5293c90a1af6" 
+       alt="Highlights"/><br>
+</p>
 
 <p align="center">
   <img src="https://github.com/user-attachments/assets/6c71a533-7836-42e6-b948-2b27dad6d32e" 
@@ -22,7 +26,8 @@ Aiming to provide enhancements, quality of life features and extended features f
 
 ## Features\cvars:
 - `cg_fixedAspect` - Fixes HUD stretching, not recommended to be changed live requires vid_restart for some elements.
-- `r_fixedaspect_clear` - clears color and depth buffers before drawing, 1 always clears it, while 2 only clears it in cases of UI,menus & cinematics
+- Cinematics now properly display above 4:3 instead of showing as a black screen.
+- `r_fixedaspect_clear` - clears color and depth buffers before drawing, 1 always clears it, while 2 only clears it while in "UI",menus & cinematics
 - `cg_fixedAspectFOV` - Implements HOR+ FOV scaling when set to 1
 - `safeArea_horizontal` - Horizontal safe area as a fraction of the screen width, might not effect all HUD elements, setting this to 0.0 will cause the HUD to be in 4:3 borders
 - `safeArea_vertical` - not fully implemented.
@@ -56,7 +61,7 @@ CoDUO_QOL can also be loaded using [Ultimate-ASI-Loader](https://github.com/Thir
 - [iw1x-client](https://github.com/hBrutal/iw1x-client)
 - [ModUtils](https://github.com/CookiePLMonster/ModUtils/tree/master)
 - [safetyhook](https://github.com/cursey/safetyhook)
-- [VladWinner](https://github.com/VladWinner) - For testing & suggestions.
+- [VladWinner](https://github.com/VladWinner) - For tesing, suggestions and other several contributions.
 - [Ultimate-ASI-Loader](https://github.com/ThirteenAG/Ultimate-ASI-Loader)
 - momo5502
 
