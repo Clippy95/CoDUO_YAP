@@ -1830,6 +1830,25 @@ int __cdecl trap_R_DrawStretchPic_center_cross(
     return cdecl_call<int>(trap_R_DrawStretchPic, x, y, w, h, s1, t1, s2, t2, hShader);
 }
 
+void AutoAnchor(float* x) {
+    if (!x)
+        return;
+    float width_offset = (process_width() * 0.5f) * get_safeArea_horizontal();
+
+    if (*x >= 450) {
+        *x += width_offset;
+        return;
+    }
+    else if (*x <= 20) {
+        *x -= width_offset;
+        }
+
+}
+
+void AutoAnchor(float& x) {
+    AutoAnchor(&x);
+}
+
 void codDLLhooks(HMODULE handle) {
     // printf("run");
     uintptr_t OFFSET = (uintptr_t)handle;
@@ -2065,6 +2084,13 @@ void codDLLhooks(HMODULE handle) {
 
         float& clock_x = *(float*)ctx.esi;
         clock_x -= (process_width() * 0.5f) * get_safeArea_horizontal();
+
+        });
+
+    CreateMidHook(cg(0x3001F64B, 0x30029FEB), [](SafetyHookContext& ctx) {
+
+        float* text_x = (float*)&ctx.ecx;
+        AutoAnchor(text_x);
 
         });
 
