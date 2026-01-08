@@ -5,6 +5,8 @@ import game;
 #include <component_loader.h>
 #include <dwmapi.h>
 #pragma comment(lib, "dwmapi.lib")
+#include <shellapi.h>
+#pragma comment(lib, "shell32.lib")
 #include "utils/common.h"
 #include "cexception.hpp"
 //#include "MinHook.h"
@@ -2735,29 +2737,74 @@ void InitHook() {
     LoadMenuConfigs();
     LoadHudShaderConfigs();
 
-    HHOOK hook = SetWindowsHookExA(WH_CALLWNDPROC, [](int code, WPARAM w, LPARAM l) -> LRESULT {
+    HHOOK windowsHook = SetWindowsHookExA(WH_CALLWNDPROC, [](int code, WPARAM w, LPARAM l) -> LRESULT {
     if (code < 0) return CallNextHookEx(NULL, code, w, l);
 
     CWPSTRUCT* p = reinterpret_cast<CWPSTRUCT*>(l);
+    static HWND hConsole = NULL;
+    static bool isWine = false;
     static char windowTitle[256];
     static constexpr char CODUOSPWINDOW[] = "CoD:United Offensive";
     static constexpr char CODUOMPWINDOW[] = "Multiplayer";
+    static constexpr char EXCEPTIONTRACERWINDOW[] = "Application Crash";
     static constexpr char EXTERNALCONSOLEWINDOW[] = "Console";
-    static std::unordered_map<HWND, bool> processedWindows;
+
+    if (!hConsole) {
+        hConsole = GetConsoleWindow();
+        typedef const char* (CDECL *wine_get_version_t)(void);
+        HMODULE hNtdll = GetModuleHandleA("ntdll.dll");
+        wine_get_version_t pwine_get_version = NULL;
+        if (hNtdll) {
+            pwine_get_version = (wine_get_version_t)GetProcAddress(hNtdll, "wine_get_version");
+        }
+        isWine = (pwine_get_version != NULL);
+    }
+
+    // Filter messages
+    static std::unordered_map<HWND, uint8_t> windowsHookCache;
+    // Bits: 0 = CoDUO(SP/MP), 1 = ExceptionTracer, 2 = ExternalConsole, 3 = AlreadyProcessed
+    if (p->message != WM_CREATE && p->message != WM_SIZE) {
+        return CallNextHookEx(NULL, code, w, l);
+    }
+
+    // Check the cache
+    auto it = windowsHookCache.find(p->hwnd);
+    if (it != windowsHookCache.end()) {
+        uint8_t flags = it->second;
+        if (flags & (1<<1)) return CallNextHookEx(NULL, code, w, l);  // ExceptionTracer
+        if (p->message == WM_SIZE && (flags & 8)) return CallNextHookEx(NULL, code, w, l);  // AlreadyProcessed
+    }
 
     // Check for the game's own windows
-    bool isCoDUOSP = false, isCoDUOMP = false, isExternalConsole = false;
-    if (p->message == WM_CREATE || p->message == WM_SIZE) {
-        GetWindowTextA(p->hwnd, windowTitle, sizeof(windowTitle));
-        isCoDUOSP = (strcmp(windowTitle, CODUOSPWINDOW) == 0);
-        isCoDUOMP = (strstr(windowTitle, CODUOMPWINDOW) != nullptr);
-        isExternalConsole = (strstr(windowTitle, EXTERNALCONSOLEWINDOW) != nullptr);
-    }
+    GetWindowTextA(p->hwnd, windowTitle, sizeof(windowTitle));
+    bool isCoDUOSP = (strcmp(windowTitle, CODUOSPWINDOW) == 0);
+    bool isCoDUOMP = (strstr(windowTitle, CODUOMPWINDOW) != nullptr);
+    bool isExceptionTracer = (strcmp(windowTitle, EXCEPTIONTRACERWINDOW) == 0);
+    bool isExternalConsole = (strstr(windowTitle, EXTERNALCONSOLEWINDOW) != nullptr);
+
+    // Cache the window type
+    uint8_t flags = 0;
+    if (isCoDUOSP || isCoDUOMP) flags |= 1;      // Bit 0: CoDUO(SP/MP)
+    else if (isExceptionTracer) flags |= (1<<1); // Bit 1: ExceptionTracer
+    else if (isExternalConsole) flags |= (1<<2); // Bit 2: ExternalConsole
+    windowsHookCache[p->hwnd] = flags;
+
+    if (isExceptionTracer) return CallNextHookEx(NULL, code, w, l);
 
     if (p->message == WM_CREATE) {
         // Set the game icon for all windows
-        HWND hConsole = GetConsoleWindow();
-        if (hConsole) {
+        if (hConsole == NULL || isWine) {
+            char modulePath[MAX_PATH];
+            if (GetModuleFileNameA(NULL, modulePath, sizeof(modulePath))) {
+                HICON hIcon = ExtractIconA(NULL, modulePath, 0);
+                if (hIcon && hIcon != (HICON)INVALID_HANDLE_VALUE) {
+                    HICON hDup = CopyIcon(hIcon);
+                    SetClassLongPtrW(p->hwnd, GCLP_HICON, reinterpret_cast<LONG_PTR>(hDup));
+                    DestroyIcon(hIcon);
+                }
+            }
+        }
+        else if (hConsole != p->hwnd) {
             HICON hIconBig = reinterpret_cast<HICON>(GetClassLongPtrA(hConsole, GCLP_HICON));
             HICON hIconSmall = reinterpret_cast<HICON>(GetClassLongPtrA(hConsole, GCLP_HICONSM));
             if (hIconBig) SetClassLongPtrA(p->hwnd, GCLP_HICON, reinterpret_cast<LONG_PTR>(hIconBig));
@@ -2774,16 +2821,23 @@ void InitHook() {
             LONG style = GetWindowLongA(p->hwnd, GWL_STYLE);
             SetWindowLongA(p->hwnd, GWL_STYLE, style | WS_MINIMIZEBOX);
 
-        // Apply dark titlebar (Win10+) to game windows
-            BOOL darkMode = TRUE;
-            DwmSetWindowAttribute(p->hwnd, 20, &darkMode, sizeof(darkMode));  // DWMWA_USE_IMMERSIVE_DARK_MODE
+        // Automatically apply dark titlebar to game windows
+            if (!isWine && p->message == WM_CREATE) {
+                BOOL darkMode = TRUE;
+                // DWMWA_USE_IMMERSIVE_DARK_MODE
+                if (hConsole && hConsole != p->hwnd) DwmGetWindowAttribute(hConsole, 20, &darkMode, sizeof(darkMode));
+                if (FAILED(DwmSetWindowAttribute(p->hwnd, 20, &darkMode, sizeof(darkMode)))) {
+                    // XP/Vista/7/DWM-off
+                }
+            }
         }
 
         // Unhide external console
         else if (isExternalConsole) {
             ShowWindow(p->hwnd, SW_SHOW);
             SetWindowPos(p->hwnd, HWND_BOTTOM, 0, 0, 0, 0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW | SWP_NOACTIVATE);
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            PostMessage(p->hwnd, WM_SYSCOMMAND, SC_MINIMIZE, 0);
         }
     }
 
@@ -2792,20 +2846,24 @@ void InitHook() {
         LONG style = GetWindowLongA(p->hwnd, GWL_STYLE);
         if ((style & WS_SYSMENU) == 0) return CallNextHookEx(NULL, code, w, l);
 
-        if (processedWindows.contains(p->hwnd)) {
+        windowsHookCache[p->hwnd] |= 8;  // Bit 3: AlreadyProcessed
+
+        // Detect only for new windows
+        auto it2 = windowsHookCache.find(p->hwnd);
+        if (it2 != windowsHookCache.end() && (it2->second & 8)) {
             return CallNextHookEx(NULL, code, w, l);
         }
 
         WINDOWPLACEMENT wp = { sizeof(wp) };
         if (GetWindowPlacement(p->hwnd, &wp)) {
+            AllowSetForegroundWindow(ASFW_ANY);
             if (wp.showCmd != SW_NORMAL) {
                 ShowWindow(p->hwnd, SW_RESTORE);
             }
-            processedWindows[p->hwnd] = true;
             SetWindowPos(p->hwnd, HWND_TOPMOST, 0, 0, 0, 0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW | SWP_NOACTIVATE);
+                SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
             SetWindowPos(p->hwnd, HWND_NOTOPMOST, 0, 0, 0, 0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
             SetForegroundWindow(p->hwnd);
         }
     }
