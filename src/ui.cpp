@@ -95,7 +95,7 @@ namespace gui {
             if (!pattern.empty()) {
                 RE_EndFrameD = safetyhook::create_inline(pattern.get_first(), RE_EndFrame_hook);
             }
-            cg_ammo_overwrite_size = Cevar_Get("cg_ammo_overwrite_size", 0.325f,CVAR_ARCHIVE);
+            cg_ammo_overwrite_size = Cevar_Get("cg_ammo_overwrite_size", 0.3f,CVAR_ARCHIVE);
             cg_ammo_overwrite_size_enabled = Cevar_Get("cg_ammo_overwrite_size_enabled", 1, CVAR_ARCHIVE);
 
             if (sp_mp(0, 1))
