@@ -48,12 +48,12 @@ Aiming to provide enhancements, quality of life features and extended features f
 - and possible some more, use the `qol_showallcvars` command to to show all cvars registered by the plugin!
 
 ## Installation
-1. Download latest [release](https://github.com/Clippy95/CoDUO_QOL/releases/latest) or for semi-experimental builds use [actions](https://github.com/Clippy95/CoDUO_QOL/actions)
+1. Download latest [release](https://github.com/Clippy95/CoDUO-YAP/releases/latest) or for semi-experimental builds use [actions](https://github.com/Clippy95/CoDUO-YAP/actions)
 2. Extract contents to your game folder
 3. Launch the game
 
 ### Installation notes
-CoDUO_QOL can also be loaded using [Ultimate-ASI-Loader](https://github.com/ThirteenAG/Ultimate-ASI-Loader), by renaming the .dll extension to an .asi (name can also be changed), but this requires setting DontLoadFromDllMain=0 in UAL's global.ini for Steam versions.
+CoDUO-YAP can also be loaded using [Ultimate-ASI-Loader](https://github.com/ThirteenAG/Ultimate-ASI-Loader), by renaming the .dll extension to an .asi (name can also be changed), but this requires setting DontLoadFromDllMain=0 in UAL's global.ini for Steam versions.
 
 ### Credits:
 - [RTCW-SP/MP](https://github.com/id-Software/RTCW-SP/)
