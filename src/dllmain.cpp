@@ -2109,13 +2109,12 @@ void codDLLhooks(HMODULE handle) {
             });
     }
 
-    pattern = hook::pattern(handle, "? ? ? ? ? ? ? ? ? E8 ? ? ? ? ? ? ? ? A1 ? ? ? ? ? ? ? ? ? ? 50");
-    if (!pattern.empty()) {
-        cg_drawupperright_x = *pattern.get_first<float*>(2);
+
+        cg_drawupperright_x = (float*)cg(0x30064FC8,0x3007C040);
         if (cg_drawupperright_x) {
             DWORD oldProtect;
             VirtualProtect(cg_drawupperright_x, sizeof(cg_drawupperright_x), PAGE_EXECUTE_READWRITE, &oldProtect);
-        }
+        
 
         if(cg_fixedAspect)
         set_cg_drawupperright_x_wide(cg_fixedAspect->base->integer);
