@@ -269,6 +269,7 @@ void OpenConsole()
     AllocConsole();
     freopen("CONOUT$", "w", stdout);
     freopen("CONIN$", "r", stdin);
+    SetConsoleTitleA(MOD_NAME " console");
     std::cout << "Console initialized.\n";
     printf("Oh,Hi Mark\n");
 }
