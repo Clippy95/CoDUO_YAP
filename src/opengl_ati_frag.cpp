@@ -125,6 +125,7 @@ PFNGLCREATESHADERPROC fglCreateShader = nullptr;
 PFNGLSHADERSOURCEPROC fglShaderSource = nullptr;
 PFNGLCOMPILESHADERPROC fglCompileShader = nullptr;
 PFNGLCREATEPROGRAMPROC fglCreateProgram = nullptr;
+PFNGLDELETEPROGRAMPROC fglDeleteProgram = nullptr;
 PFNGLATTACHSHADERPROC fglAttachShader = nullptr;
 PFNGLLINKPROGRAMPROC fglLinkProgram = nullptr;
 PFNGLUSEPROGRAMPROC fglUseProgram = nullptr;
@@ -589,10 +590,46 @@ void WINAPI glDeleteFragmentShaderATI_hook(GLuint id) {
     ATI_DEBUG_PRINT_CHANNEL(1, "glDeleteFragmentShaderATI(%d)\n", id);
     if (g_ati_shaders.count(id)) {
         if (g_ati_shaders[id].glsl_program != 0) {
-            // TODO: delete GLSL program
+            if (fglDeleteProgram) {
+                fglDeleteProgram(g_ati_shaders[id].glsl_program);
+                ATI_DEBUG_PRINT_CHANNEL(0, "Deleted GLSL program %d for ATI shader %d\n",
+                    g_ati_shaders[id].glsl_program, id);
+            }
         }
+
+        // If deleting the currently bound shader, unbind it
+        if (g_current_shader == id) {
+            g_current_shader = 0;
+            if (fglUseProgram) {
+                fglUseProgram(0);
+            }
+        }
+
         g_ati_shaders.erase(id);
     }
+}
+
+void DeleteAllATIFragmentShaders() {
+    ATI_DEBUG_PRINT_CHANNEL(0, "Deleting all ATI fragment shaders (%d total)\n",
+        (int)g_ati_shaders.size());
+
+    for (auto& pair : g_ati_shaders) {
+        if (pair.second.glsl_program != 0) {
+            if (fglDeleteProgram) {
+                fglDeleteProgram(pair.second.glsl_program);
+                ATI_DEBUG_PRINT_CHANNEL(1, "Deleted GLSL program %d for ATI shader %d\n",
+                    pair.second.glsl_program, pair.first);
+            }
+        }
+    }
+
+    g_ati_shaders.clear();
+
+    // Possible 
+    g_next_shader_id = 1;
+    g_current_shader = 0;
+
+    ATI_DEBUG_PRINT_CHANNEL(0, "All ATI fragment shaders deleted\n");
 }
 
 void WINAPI glBeginFragmentShaderATI_hook() {
@@ -604,6 +641,12 @@ void WINAPI glBeginFragmentShaderATI_hook() {
     g_ati_shaders[g_current_shader].compiled = false;
 }
 
+uintptr_t R_DeleteFragmentShaders_ptr;
+
+void R_DeleteFragmentShaders_hook() {
+    cdecl_call<void>(R_DeleteFragmentShaders_ptr);
+    DeleteAllATIFragmentShaders();
+}
 
 void WINAPI glEndFragmentShaderATI_hook() {
     ATI_DEBUG_PRINT_CHANNEL(1, "[ATI] glEndFragmentShaderATI()\n");
@@ -913,9 +956,9 @@ namespace opengl_ati_frag {
             r_arb_fragment_shader_wrap_ati = Cevar_Get("r_arb_fragment_shader_wrap_ati", 1, CVAR_ARCHIVE | CVAR_LATCH, 0, 1);
             r_arb_fragment_shader_debug = Cevar_Get("r_arb_fragment_shader_debug", 0, CVAR_ARCHIVE, -1, 6);
             r_arb_fragment_shader_debug_print = Cevar_Get("r_arb_fragment_shader_debug_print",1, CVAR_ARCHIVE,0,3);
-            r_arb_fragment_fresnel_power = Cevar_Get("r_arb_fresnel_power",2.0f, CVAR_ARCHIVE);  // current Default: 2.0
-            r_arb_fragment_fresnel_bias = Cevar_Get("r_arb_fresnel_bias", 0.f, CVAR_ARCHIVE);      // current Default: 0.0
-            r_arb_fragment_disable_fog = Cevar_Get("r_arb_disable_fog", 0, 0, 0,1);  // default 0 (fog enabled)
+            r_arb_fragment_fresnel_power = Cevar_Get("r_arb_fragment_fresnel_power",2.0f, CVAR_ARCHIVE);  // current Default: 2.0
+            r_arb_fragment_fresnel_bias = Cevar_Get("r_arb_fragment_fresnel_bias", 0.f, CVAR_ARCHIVE);      // current Default: 0.0
+            r_arb_fragment_disable_fog = Cevar_Get("r_arb_fragment_disable_fog", 0, 0, 0,1);  // default 0 (fog enabled)
             auto pattern = hook::pattern("57 33 FF 3B C7 0F 84 ? ? ? ? 8B 15");
             if(!pattern.empty())
                 if (!pattern.empty())
@@ -959,6 +1002,7 @@ namespace opengl_ati_frag {
                 fglAttachShader = (PFNGLATTACHSHADERPROC)realWglGetProcAddress("glAttachShader");
                 fglLinkProgram = (PFNGLLINKPROGRAMPROC)realWglGetProcAddress("glLinkProgram");
                 fglUseProgram = (PFNGLUSEPROGRAMPROC)realWglGetProcAddress("glUseProgram");
+                fglDeleteProgram = (PFNGLDELETEPROGRAMPROC)realWglGetProcAddress("glDeleteProgram");
                 fglDeleteShader = (PFNGLDELETESHADERPROC)realWglGetProcAddress("glDeleteShader");
                 fglGetShaderiv = (PFNGLGETSHADERIVPROC)realWglGetProcAddress("glGetShaderiv");
                 fglGetShaderInfoLog = (PFNGLGETSHADERINFOLOGPROC)realWglGetProcAddress("glGetShaderInfoLog");
