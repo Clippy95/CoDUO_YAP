@@ -886,10 +886,10 @@ void WINAPI glSetFragmentShaderConstantATI_hook(GLuint dst, const GLfloat* value
     }
 }
 
-
+bool ATI_FRAGMENT_SHADER_VALID = false;
 void* __stdcall wglGetProcAddress_hook(const char* name) {
 
-    if (r_arb_fragment_shader_wrap_ati->base->integer) {
+    if (ATI_FRAGMENT_SHADER_VALID) {
         if (strcmp(name, "glGenFragmentShadersATI") == 0) {
             printf("[ATI] Intercepting glGenFragmentShadersATI\n");
             return (void*)glGenFragmentShadersATI_hook;
@@ -948,10 +948,12 @@ void* __stdcall wglGetProcAddress_hook(const char* name) {
 
 namespace opengl_ati_frag {
 
-    bool are_original_extensions_there() {
-        std::string_view extensions = *(const char**)exe(0x047BE08C, 0x489A02C);
-
-
+    bool ExtensionExists(const char* glextension) {
+        auto cextensions = *(const char**)exe(0x047BE08C, 0x489A02C);
+        if (cextensions) {
+            return strstr(cextensions, glextension) != nullptr;
+        }
+        return false;
 
     }
 
@@ -1036,17 +1038,32 @@ namespace opengl_ati_frag {
                 }
                 else {
                     auto pattern = hook::pattern("0F 84 ? ? ? ? 8B 0D ? ? ? ? 39 71 ? 0F 84 ? ? ? ? 68 ? ? ? ? FF 15 ? ? ? ? 68 ? ? ? ? A3 ? ? ? ? A3 ? ? ? ? FF 15 ? ? ? ? 68 ? ? ? ? A3 ? ? ? ? A3 ? ? ? ? FF 15 ? ? ? ? 68 ? ? ? ? A3 ? ? ? ? A3 ? ? ? ? FF 15 ? ? ? ? 68 ? ? ? ? A3 ? ? ? ? A3 ? ? ? ? FF 15 ? ? ? ? 68 ? ? ? ? A3 ? ? ? ? A3 ? ? ? ? FF 15 ? ? ? ? 68 ? ? ? ? A3 ? ? ? ? A3 ? ? ? ? FF 15 ? ? ? ? 68 ? ? ? ? A3 ? ? ? ? A3 ? ? ? ? FF 15 ? ? ? ? 68 ? ? ? ? A3 ? ? ? ? A3 ? ? ? ? FF 15 ? ? ? ? 68 ? ? ? ? A3 ? ? ? ? A3 ? ? ? ? FF 15 ? ? ? ? 68 ? ? ? ? A3 ? ? ? ? A3 ? ? ? ? FF 15 ? ? ? ? 68");
-                    if (!pattern.empty()) {
-                        GL_ATI_fragment_shader_force_jump = safetyhook::create_mid(pattern.get_first(), [](SafetyHookContext& ctx) {
+                    GL_ATI_fragment_shader_force_jump = safetyhook::create_mid(pattern.get_first(), [](SafetyHookContext& ctx) {
 
-                            if ((fglCreateShader && fglUseProgram) && (r_arb_fragment_shader_wrap_ati->base->integer == 1)) {
+                        auto r_nv_register_combiners = Cvar_Find("r_nv_register_combiners");
+                        auto r_nv_texture_shader = Cvar_Find("r_nv_texture_shader");
+                        bool GL_NV_fragment_combo = ExtensionExists("GL_NV_texture_shader") || ExtensionExists("GL_NV_register_combiners");
+                        bool GL_ATI_FRAGMENT_SHADER_exists = ExtensionExists("GL_ATI_fragment_shader");
+
+
+                        bool skip_due_to_nvidia = GL_NV_fragment_combo &&
+                            (r_nv_register_combiners->integer > 0 && r_nv_texture_shader->integer > 0);
+                        bool skip_due_to_ati = GL_ATI_FRAGMENT_SHADER_exists &&
+                            (r_arb_fragment_shader_wrap_ati->base->integer < 2);
+
+                        if (!skip_due_to_nvidia && !skip_due_to_ati) {
+                            if ((fglCreateShader && fglUseProgram) && (r_arb_fragment_shader_wrap_ati->base->integer)) {
                                 ctx.eip = (GL_ATI_fragment_shader_force_jump.target_address() + 6);
-                                Com_Printf("[" MOD_NAME "] " "Force Enabling GL_ATI_FRAGMENT_SHADER by translating it to GL_ARB_FRAGMENT_SHADER\n");
+                                ATI_FRAGMENT_SHADER_VALID = true;
+                                Com_Printf("[" MOD_NAME "] " "Force Enabling GL_ATI_fragment_shader by translating it to GL_ARB_FRAGMENT_SHADER\n");
                             }
+                        }
+                        else {
+                            ATI_FRAGMENT_SHADER_VALID = false;
+                            Com_Printf("[" MOD_NAME "] " "Skipping wrapped GL_ARB_FRAGMENT_SHADER because GL_NV_texture_shader or GL_NV_register_combiners or GL_ATI_fragment_shader already exists, disable r_nv_register_combiners or r_nv_texture_shader\nas for GL_ATI_FRAGMENT_SHADER use r_arb_fragment_shader_wrap_ati 2 to force wrapping it!\n");
+                        }
 
-                            });
-
-                    }
+                        });
                 }
 
                     });
