@@ -35,6 +35,10 @@ public:
 	{
 	}
 
+	virtual void on_ogl_load(HMODULE tOHGL)
+	{
+	}
+
 	virtual void* load_import([[maybe_unused]] const std::string& library, [[maybe_unused]] const std::string& function)
 	{
 		return nullptr;

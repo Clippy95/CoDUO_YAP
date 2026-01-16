@@ -97,9 +97,10 @@
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableUAC>false</EnableUAC>
-      <AdditionalLibraryDirectories>$(ProjectDir)lib\$(Configuration)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(ProjectDir)lib\Release</AdditionalLibraryDirectories>
       <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
       <OutputFile>$(OutDir)ddraw$(TargetExt)</OutputFile>
+      <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PreBuildEvent>
       <Command>pushd "$(SolutionDir)include\extra"
@@ -132,9 +133,10 @@ popd</Command>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableUAC>false</EnableUAC>
-      <AdditionalLibraryDirectories>$(ProjectDir)lib\$(Configuration)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(ProjectDir)lib\Release</AdditionalLibraryDirectories>
       <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
       <OutputFile>$(OutDir)ddraw$(TargetExt)</OutputFile>
+      <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PreBuildEvent>
       <Command>pushd "$(SolutionDir)include\extra"
@@ -210,6 +212,7 @@ popd</Command>
     <ClCompile Include="src\game\game.cpp" />
     <ClCompile Include="src\LAAPatch.cpp" />
     <ClCompile Include="src\loader\component_interface.cpp" />
+    <ClCompile Include="src\opengl_ati_frag.cpp" />
     <ClCompile Include="src\pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
@@ -222,6 +225,7 @@ popd</Command>
     <ClCompile Include="src\SDLLP.cpp" />
     <ClCompile Include="src\ui.cpp" />
     <ClCompile Include="src\utils\common.cpp" />
+    <ClCompile Include="src\utils\hooking.cpp" />
     <ClCompile Include="src\weapon.cpp" />
   </ItemGroup>
   <ItemGroup>

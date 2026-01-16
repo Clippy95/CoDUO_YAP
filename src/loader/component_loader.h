@@ -45,6 +45,7 @@ public:
 	static void post_unpack();
 	static void post_game_sp();
 	static void post_cgame();
+	static void on_ogl_load(HMODULE tOHGL);
 	static void post_ui();
 	static void pre_destroy();
 	static void clean();

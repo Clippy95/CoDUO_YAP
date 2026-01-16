@@ -9,6 +9,7 @@ import game;
 #pragma comment(lib, "shell32.lib")
 #include "utils/common.h"
 #include "cexception.hpp"
+#include "utils/hooking.h"
 //#include "MinHook.h"
 
 
@@ -19,33 +20,13 @@ import game;
 
 #define MAX_CVARS_NEW 2048
 
-static std::vector<std::unique_ptr<SafetyHookInline>> g_inlineHooks;
-static std::vector<std::unique_ptr<SafetyHookMid>> g_midHooks;
+
 
 
 
 
 static char charbuffer[2048]{};
 
-template<typename T, typename Fn>
-SafetyHookInline* CreateInlineHook(T target, Fn destination, SafetyHookInline::Flags flags = SafetyHookInline::Default) {
-    if (!target)
-        return NULL;
-    auto hook = std::make_unique<SafetyHookInline>(safetyhook::create_inline(target, destination, flags));
-    auto* ptr = hook.get();
-    g_inlineHooks.push_back(std::move(hook));
-    return ptr;
-}
-
-template<typename T>
-SafetyHookMid* CreateMidHook(T target, safetyhook::MidHookFn destination, safetyhook::MidHook::Flags flags = safetyhook::MidHook::Default) {
-    if (!target)
-        return NULL;
-    auto hook = std::make_unique<SafetyHookMid>(safetyhook::create_mid(target, destination, flags));
-    auto* ptr = hook.get();
-    g_midHooks.push_back(std::move(hook));
-    return ptr;
-}
 
 
 std::vector<const char*> QOL_registered_cvars;
@@ -514,6 +495,10 @@ HMODULE __stdcall LoadLibraryHook(const char* filename) {
     else if (!strcmp(filename,"uo_gamex86.dll") && sp_mp(1)) {
         game_hooks(hModule);
         component_loader::post_game_sp();
+    }
+    else if (!strcmp(filename, "opengl32") || !strcmp(filename, "opengl32.dll")) {
+        game_hooks(hModule);
+        component_loader::on_ogl_load(hModule);
     }
 
     return hModule;

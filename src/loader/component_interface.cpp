@@ -68,6 +68,12 @@ void component_loader::post_cgame()
 		component_->post_cgame();
 }
 
+void component_loader::on_ogl_load(HMODULE tOHGL)
+{
+	for (const auto& component_ : get_components())
+		component_->on_ogl_load(tOHGL);
+}
+
 void component_loader::post_game_sp()
 {
 	for (const auto& component_ : get_components())
