@@ -22,6 +22,7 @@ cevar_s* r_arb_fragment_fresnel_power;
 cevar_s* r_arb_fragment_fresnel_bias;
 cevar_s* r_arb_fragment_disable_fog;
 cevar_s* r_arb_fragment_shader_debug_print;
+cevar_s* r_fog_amd_drawsun_workaround;
 
 
 // Debug print macro for non-looping code (channel 0)
@@ -504,10 +505,17 @@ GLuint WINAPI glGenFragmentShadersATI_hook(GLuint range) {
 typedef void (WINAPI* PFNGLGETINTEGERVPROC)(GLenum pname, GLint* params);
 typedef void (WINAPI* PFNGLGETFLOATVPROC)(GLenum pname, GLfloat* params);
 typedef GLboolean(WINAPI* PFNGLISENABLEDPROC)(GLenum cap);
+typedef const char*(WINAPI* PFNGLGETSTRINGPROC)(GLenum cap);
+
+PFNGLGETSTRINGPROC fGlGetString;
+
+typedef void (WINAPI* PFNGLENABLEPROC)(GLenum cap);
 
 PFNGLGETINTEGERVPROC fglGetIntegerv = nullptr;
 PFNGLGETFLOATVPROC fglGetFloatv = nullptr;
 PFNGLISENABLEDPROC fglIsEnabled = nullptr;
+PFNGLENABLEPROC fglEnable;
+PFNGLENABLEPROC fglDisable;
 
 
 void WINAPI glBindFragmentShaderATI_hook(GLuint id) {
@@ -946,6 +954,113 @@ void* __stdcall wglGetProcAddress_hook(const char* name) {
 //    stdcall_call<void>(0x004CD410);
 //}
 
+
+GLuint g_sun_shader_program = 0;
+bool g_sun_shader_initialized = false;
+
+GLuint CreateSunShader() {
+    if (!fglCreateShader || !fglUseProgram) {
+        ATI_DEBUG_PRINT_CHANNEL(0, "[ERROR] GLSL functions not available for sun shader!\n");
+        return 0;
+    }
+
+    const char* vsSrc =
+        "void main() {\n"
+        "    gl_Position = ftransform();\n"
+        "    gl_TexCoord[0] = gl_MultiTexCoord0;\n"
+        "    gl_FrontColor = gl_Color;\n"
+        "}\n";
+
+    const char* fsSrc =
+        "uniform sampler2D texture0;\n"
+        "void main() {\n"
+        "    gl_FragColor = texture2D(texture0, gl_TexCoord[0].xy) * gl_Color;\n"
+        "}\n";
+
+    GLuint vs = fglCreateShader(GL_VERTEX_SHADER);
+    fglShaderSource(vs, 1, &vsSrc, NULL);
+    fglCompileShader(vs);
+
+
+    GLint success;
+    fglGetShaderiv(vs, GL_COMPILE_STATUS, &success);
+    if (!success) {
+        char log[1024];
+        fglGetShaderInfoLog(vs, 1024, NULL, log);
+        ATI_DEBUG_PRINT_CHANNEL(0, "[ERROR] Sun vertex shader compile error:\n%s\n", log);
+    }
+
+    GLuint fs = fglCreateShader(GL_FRAGMENT_SHADER);
+    fglShaderSource(fs, 1, &fsSrc, NULL);
+    fglCompileShader(fs);
+
+    fglGetShaderiv(fs, GL_COMPILE_STATUS, &success);
+    if (!success) {
+        char log[1024];
+        fglGetShaderInfoLog(fs, 1024, NULL, log);
+        ATI_DEBUG_PRINT_CHANNEL(0, "[ERROR] Sun fragment shader compile error:\n%s\n", log);
+    }
+
+    GLuint program = fglCreateProgram();
+    fglAttachShader(program, vs);
+    fglAttachShader(program, fs);
+    fglLinkProgram(program);
+
+
+    fglGetProgramiv(program, GL_LINK_STATUS, &success);
+    if (!success) {
+        char log[1024];
+        fglGetProgramInfoLog(program, 1024, NULL, log);
+        ATI_DEBUG_PRINT_CHANNEL(0, "[ERROR] Sun shader program link error:\n%s\n", log);
+    }
+
+    fglDeleteShader(vs);
+    fglDeleteShader(fs);
+
+    ATI_DEBUG_PRINT_CHANNEL(0, "[SUN SHADER] Compiled shader program: %d\n", program);
+    return program;
+}
+
+uintptr_t RB_DrawSunSprite_addr;
+void hooked_RB_DrawSunSprite() {
+
+    if (!g_sun_shader_initialized) {
+        g_sun_shader_program = CreateSunShader();
+        g_sun_shader_initialized = true;
+
+        if (g_sun_shader_program == 0) {
+            ATI_DEBUG_PRINT_CHANNEL(0, "[ERROR] Failed to create sun shader, using original rendering\n");
+             cdecl_call<void*>(RB_DrawSunSprite_addr);
+             return;
+        }
+    }
+
+
+    if (g_sun_shader_program != 0 && fglUseProgram &&  r_fog_amd_drawsun_workaround && r_fog_amd_drawsun_workaround->base->integer) {
+        fglUseProgram(g_sun_shader_program);
+
+
+        if (fglGetUniformLocation && fglUniform1i) {
+            GLint texLoc = fglGetUniformLocation(g_sun_shader_program, "texture0");
+            if (texLoc >= 0) {
+                fglUniform1i(texLoc, 0);
+            }
+        }
+
+        ATI_DEBUG_PRINT_CHANNEL(1, "[SUN SHADER] Activated shader for sun sprite\n");
+    }
+
+
+    cdecl_call<void>(RB_DrawSunSprite_addr);
+
+
+    if (fglUseProgram && r_fog_amd_drawsun_workaround && r_fog_amd_drawsun_workaround->base->integer) {
+        fglUseProgram(0);
+        ATI_DEBUG_PRINT_CHANNEL(1, "[SUN SHADER] Deactivated shader, back to fixed-function\n");
+    }
+
+}
+
 namespace opengl_ati_frag {
 
     bool ExtensionExists(const char* glextension) {
@@ -954,8 +1069,13 @@ namespace opengl_ati_frag {
             return strstr(cextensions, glextension) != nullptr;
         }
         return false;
-
     }
+
+    // Might not be 100% accurate but this should be 22.7.1+ and should detect if the OpenGL fixes have been implemented by AMD
+    bool AMD_PostJuneDriver() {
+        return (ExtensionExists("GL_ATI_meminfo") || ExtensionExists("GL_AMD_debug_output")) && ExtensionExists("GL_ARB_fragment_shader") && !ExtensionExists("GL_ATI_fragment_shader");
+    }
+
 
     SafetyHookMid GL_ATI_fragment_shader_force_jump;
     uintptr_t saved_addr = 0;
@@ -964,24 +1084,61 @@ namespace opengl_ati_frag {
     public:
 
         void post_unpack() override {
+            auto pattern = hook::pattern("E8 ? ? ? ? ? ? ? 52 E8 ? ? ? ? 83 C4 ? 59");
+            if(!pattern.empty())
+            Memory::VP::InterceptCall(pattern.get_first(), RB_DrawSunSprite_addr, hooked_RB_DrawSunSprite);
+
             r_arb_fragment_shader_wrap_ati = Cevar_Get("r_arb_fragment_shader_wrap_ati", 1, CVAR_ARCHIVE | CVAR_LATCH, 0, 1);
             r_arb_fragment_shader_debug = Cevar_Get("r_arb_fragment_shader_debug", 0, CVAR_ARCHIVE, -1, 6);
             r_arb_fragment_shader_debug_print = Cevar_Get("r_arb_fragment_shader_debug_print",1, CVAR_ARCHIVE,0,3);
             r_arb_fragment_fresnel_power = Cevar_Get("r_arb_fragment_fresnel_power",2.0f, CVAR_ARCHIVE);  // current Default: 2.0
             r_arb_fragment_fresnel_bias = Cevar_Get("r_arb_fragment_fresnel_bias", 0.f, CVAR_ARCHIVE);      // current Default: 0.0
             r_arb_fragment_disable_fog = Cevar_Get("r_arb_fragment_disable_fog", 0, 0, 0,1);  // default 0 (fog enabled)
-            auto pattern = hook::pattern("57 33 FF 3B C7 0F 84 ? ? ? ? 8B 15");
-            if(!pattern.empty())
-                if (!pattern.empty())
-                    static auto RE_beinframe = safetyhook::create_mid(pattern.get_first(-5), [](SafetyHookContext& ctx) {
-                    // Capture fog state once per frame
-                    g_cached_fog.enabled = fglIsEnabled(GL_FOG);
-                    fglGetIntegerv(GL_FOG_MODE, &g_cached_fog.mode);
-                    fglGetFloatv(GL_FOG_DENSITY, &g_cached_fog.density);
-                    fglGetFloatv(GL_FOG_START, &g_cached_fog.start);
-                    fglGetFloatv(GL_FOG_END, &g_cached_fog.end);
-                    fglGetFloatv(GL_FOG_COLOR, g_cached_fog.color);
-                        });
+            //pattern = hook::pattern("57 33 FF 3B C7 0F 84 ? ? ? ? 8B 15");
+            //if(!pattern.empty())
+            //    if (!pattern.empty())
+            //        static auto RE_beinframe = safetyhook::create_mid(pattern.get_first(-5), [](SafetyHookContext& ctx) {
+            //        // Capture fog state once per frame
+            //        g_cached_fog.enabled = fglIsEnabled(GL_FOG);
+            //        fglGetIntegerv(GL_FOG_MODE, &g_cached_fog.mode);
+            //        fglGetFloatv(GL_FOG_DENSITY, &g_cached_fog.density);
+            //        fglGetFloatv(GL_FOG_START, &g_cached_fog.start);
+            //        fglGetFloatv(GL_FOG_END, &g_cached_fog.end);
+            //        fglGetFloatv(GL_FOG_COLOR, g_cached_fog.color);
+            //            });
+
+             pattern = hook::pattern("0F 84 ? ? ? ? 8B 0D ? ? ? ? 39 71 ? 0F 84 ? ? ? ? 68 ? ? ? ? FF 15 ? ? ? ? 68 ? ? ? ? A3 ? ? ? ? A3 ? ? ? ? FF 15 ? ? ? ? 68 ? ? ? ? A3 ? ? ? ? A3 ? ? ? ? FF 15 ? ? ? ? 68 ? ? ? ? A3 ? ? ? ? A3 ? ? ? ? FF 15 ? ? ? ? 68 ? ? ? ? A3 ? ? ? ? A3 ? ? ? ? FF 15 ? ? ? ? 68 ? ? ? ? A3 ? ? ? ? A3 ? ? ? ? FF 15 ? ? ? ? 68 ? ? ? ? A3 ? ? ? ? A3 ? ? ? ? FF 15 ? ? ? ? 68 ? ? ? ? A3 ? ? ? ? A3 ? ? ? ? FF 15 ? ? ? ? 68 ? ? ? ? A3 ? ? ? ? A3 ? ? ? ? FF 15 ? ? ? ? 68 ? ? ? ? A3 ? ? ? ? A3 ? ? ? ? FF 15 ? ? ? ? 68 ? ? ? ? A3 ? ? ? ? A3 ? ? ? ? FF 15 ? ? ? ? 68");
+            GL_ATI_fragment_shader_force_jump = safetyhook::create_mid(pattern.get_first(), [](SafetyHookContext& ctx) {
+
+                if (!fglCreateShader || !fglShaderSource || !fglCompileShader) {
+                    printf("[ERROR] Failed to load GLSL functions! OpenGL 2.0 not available?\n");
+                    return;
+                }
+                auto r_nv_register_combiners = Cvar_Find("r_nv_register_combiners");
+                auto r_nv_texture_shader = Cvar_Find("r_nv_texture_shader");
+                bool GL_NV_fragment_combo = ExtensionExists("GL_NV_texture_shader") || ExtensionExists("GL_NV_register_combiners");
+                bool GL_ATI_FRAGMENT_SHADER_exists = ExtensionExists("GL_ATI_fragment_shader");
+
+
+                bool skip_due_to_nvidia = GL_NV_fragment_combo &&
+                    (r_nv_register_combiners->integer > 0 || r_nv_texture_shader->integer > 0);
+                bool skip_due_to_ati = GL_ATI_FRAGMENT_SHADER_exists &&
+                    (r_arb_fragment_shader_wrap_ati->base->integer < 2);
+
+                if (!skip_due_to_nvidia && !skip_due_to_ati) {
+                    if ((fglCreateShader && fglUseProgram) && (r_arb_fragment_shader_wrap_ati->base->integer)) {
+                        ctx.eip = (GL_ATI_fragment_shader_force_jump.target_address() + 6);
+                        ATI_FRAGMENT_SHADER_VALID = true;
+                        Com_Printf("[" MOD_NAME "] " "Force Enabling GL_ATI_fragment_shader by translating it to GL_ARB_FRAGMENT_SHADER\n");
+                    }
+                }
+                else {
+                    ATI_FRAGMENT_SHADER_VALID = false;
+                    Com_Printf("[" MOD_NAME "] " "Skipping wrapped GL_ARB_FRAGMENT_SHADER because GL_NV_texture_shader or GL_NV_register_combiners or GL_ATI_fragment_shader already exists, disable r_nv_register_combiners or r_nv_texture_shader\nas for GL_ATI_FRAGMENT_SHADER use r_arb_fragment_shader_wrap_ati 2 to force wrapping it!\n");
+                }
+
+                });
+
 
         }
 
@@ -997,6 +1154,11 @@ namespace opengl_ati_frag {
             fglGetIntegerv = (PFNGLGETINTEGERVPROC)GetProcAddress(tOHGL, "glGetIntegerv");
             fglGetFloatv = (PFNGLGETFLOATVPROC)GetProcAddress(tOHGL, "glGetFloatv");
             fglIsEnabled = (PFNGLISENABLEDPROC)GetProcAddress(tOHGL, "glIsEnabled");
+            fglEnable = (PFNGLENABLEPROC)GetProcAddress(tOHGL, "glEnable");
+            fglDisable = (PFNGLENABLEPROC)GetProcAddress(tOHGL, "glDisable");
+
+
+            fGlGetString = (PFNGLGETSTRINGPROC)GetProcAddress(tOHGL, "glGetString");
 
 
             auto pattern1 = hook::pattern("51 53 56 33 F6 57 68");
@@ -1006,6 +1168,10 @@ namespace opengl_ati_frag {
                 static auto whatever = safetyhook::create_mid(saved_addr, [](SafetyHookContext& ctx) {
                 auto realWglGetProcAddress = (void* (__stdcall*)(const char*))GetProcAddress(opengl_addr, "wglGetProcAddress");
                 // Load GLSL functions manually - game won't request these
+
+                if(!r_fog_amd_drawsun_workaround)
+                    r_fog_amd_drawsun_workaround = Cevar_Get("r_fog_amd_drawsun_workaround", (int)AMD_PostJuneDriver(), CVAR_ARCHIVE, 0, 1);
+
                 fglCreateShader = (PFNGLCREATESHADERPROC)realWglGetProcAddress("glCreateShader");
                 fglShaderSource = (PFNGLSHADERSOURCEPROC)realWglGetProcAddress("glShaderSource");
                 fglCompileShader = (PFNGLCOMPILESHADERPROC)realWglGetProcAddress("glCompileShader");
@@ -1032,39 +1198,6 @@ namespace opengl_ati_frag {
                 printf("  fglCreateProgram: %p\n", fglCreateProgram);
                 printf("  fglLinkProgram: %p\n", fglLinkProgram);
                 printf("  fglUseProgram: %p\n", fglUseProgram);
-
-                if (!fglCreateShader || !fglShaderSource || !fglCompileShader) {
-                    printf("[ERROR] Failed to load GLSL functions! OpenGL 2.0 not available?\n");
-                }
-                else {
-                    auto pattern = hook::pattern("0F 84 ? ? ? ? 8B 0D ? ? ? ? 39 71 ? 0F 84 ? ? ? ? 68 ? ? ? ? FF 15 ? ? ? ? 68 ? ? ? ? A3 ? ? ? ? A3 ? ? ? ? FF 15 ? ? ? ? 68 ? ? ? ? A3 ? ? ? ? A3 ? ? ? ? FF 15 ? ? ? ? 68 ? ? ? ? A3 ? ? ? ? A3 ? ? ? ? FF 15 ? ? ? ? 68 ? ? ? ? A3 ? ? ? ? A3 ? ? ? ? FF 15 ? ? ? ? 68 ? ? ? ? A3 ? ? ? ? A3 ? ? ? ? FF 15 ? ? ? ? 68 ? ? ? ? A3 ? ? ? ? A3 ? ? ? ? FF 15 ? ? ? ? 68 ? ? ? ? A3 ? ? ? ? A3 ? ? ? ? FF 15 ? ? ? ? 68 ? ? ? ? A3 ? ? ? ? A3 ? ? ? ? FF 15 ? ? ? ? 68 ? ? ? ? A3 ? ? ? ? A3 ? ? ? ? FF 15 ? ? ? ? 68 ? ? ? ? A3 ? ? ? ? A3 ? ? ? ? FF 15 ? ? ? ? 68");
-                    GL_ATI_fragment_shader_force_jump = safetyhook::create_mid(pattern.get_first(), [](SafetyHookContext& ctx) {
-
-                        auto r_nv_register_combiners = Cvar_Find("r_nv_register_combiners");
-                        auto r_nv_texture_shader = Cvar_Find("r_nv_texture_shader");
-                        bool GL_NV_fragment_combo = ExtensionExists("GL_NV_texture_shader") || ExtensionExists("GL_NV_register_combiners");
-                        bool GL_ATI_FRAGMENT_SHADER_exists = ExtensionExists("GL_ATI_fragment_shader");
-
-
-                        bool skip_due_to_nvidia = GL_NV_fragment_combo &&
-                            (r_nv_register_combiners->integer > 0 && r_nv_texture_shader->integer > 0);
-                        bool skip_due_to_ati = GL_ATI_FRAGMENT_SHADER_exists &&
-                            (r_arb_fragment_shader_wrap_ati->base->integer < 2);
-
-                        if (!skip_due_to_nvidia && !skip_due_to_ati) {
-                            if ((fglCreateShader && fglUseProgram) && (r_arb_fragment_shader_wrap_ati->base->integer)) {
-                                ctx.eip = (GL_ATI_fragment_shader_force_jump.target_address() + 6);
-                                ATI_FRAGMENT_SHADER_VALID = true;
-                                Com_Printf("[" MOD_NAME "] " "Force Enabling GL_ATI_fragment_shader by translating it to GL_ARB_FRAGMENT_SHADER\n");
-                            }
-                        }
-                        else {
-                            ATI_FRAGMENT_SHADER_VALID = false;
-                            Com_Printf("[" MOD_NAME "] " "Skipping wrapped GL_ARB_FRAGMENT_SHADER because GL_NV_texture_shader or GL_NV_register_combiners or GL_ATI_fragment_shader already exists, disable r_nv_register_combiners or r_nv_texture_shader\nas for GL_ATI_FRAGMENT_SHADER use r_arb_fragment_shader_wrap_ati 2 to force wrapping it!\n");
-                        }
-
-                        });
-                }
 
                     });
 
