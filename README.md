@@ -16,6 +16,8 @@ Aiming to provide enhancements, quality-of-life improvements and advanced featur
 | [`.roq`, `.bik`] Cinematics | Properly displayed in aspect ratios wider than 4:3 and no longer appear as a black screen |
 | `safeArea_horizontal` | Horizontal safe area as a fraction of the screen width, might not affect all HUD elements, setting this to `0.0` will cause the HUD to be in 4:3 borders |
 | `safeArea_vertical` | Not fully implemented |
+| `r_arb_fragment_shader_wrap_ati` | Wraps the OpenGL extension `GL_ATI_FRAGMENT_SHADER` to `GL_ARB_FRAGMENT_SHADER` not 100% accurate to the original extension, implementation is hardware agnostic and works on AMD,NVIDIA, Intel <br><sup>(for Nvidia it requires seta r_nv_texture_shader "0" and seta r_nv_register_combiners "0" otherwise those extensions will take priority over ATI fragment shader.)</sup> <br><sup> Below is footage taken on an AMD GPU, Drivers: Adrenalin 25.12.1, the drivers have a missing `GL_ATI_FRAGMENT_SHADER` implementation </sup> <br><img width="540" src="https://github.com/user-attachments/assets/971831bc-c8e9-4642-8ebe-cb5e8ca5e158" alt="r_arb_fragment_shader_wrap_ati showcase"/> |
+| `r_fog_drawsun_workaround` | Fixes sun/moon going invisible when `r_fog` is enabled on modern GPU drivers |
 | `cg_fovscale` | Applies a multiplier to overall FOV |
 | `cg_fovscale_ads` | Applies a multiplier to Aim down sights (ADS) FOV |
 | `m_rawinput` | Toggles raw mouse input |
