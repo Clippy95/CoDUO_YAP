@@ -475,6 +475,16 @@ namespace weapon {
                 });
 
         }
+
+        //pattern = hook::pattern(handle,"83 F8 ? 75 ? ? ? ? ? ? ? ? ? ? ? E9 ? ? ? ? 83 F8");
+        //if (!pattern.empty()) {
+        //    CreateMidHook(pattern.get_first(), [](SafetyHookContext& ctx) {
+
+        //        printf("speed %f\n", *(float*)(ctx.esp + 0x8));
+
+        //        });
+        //}
+
     }
 
 
